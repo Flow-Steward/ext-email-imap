@@ -1,0 +1,33 @@
+connection_types:
+  - connection_type_id: imap_mailbox
+    display_name: IMAP mailbox
+    description: Project-scoped generic IMAP mailbox with non-secret settings and a password secret.
+    config_schema:
+      type: object
+      additionalProperties: false
+      required: [provider_preset, imap_host, imap_port, tls_mode, username]
+      properties:
+        provider_preset: {type: string}
+        imap_host: {type: string}
+        imap_port: {type: integer, minimum: 1, maximum: 65535}
+        tls_mode: {type: string, enum: [ssl, starttls]}
+        username: {type: string}
+        default_mailbox: {type: string}
+        processed_mailbox: {type: string}
+        trash_mailbox: {type: string}
+    secret_schema:
+      type: object
+      additionalProperties: false
+      required: [password]
+      properties:
+        password: {type: string}
+    capabilities:
+      discover_settings: true
+      test_connection: true
+      list_mailboxes: true
+      search_messages: true
+      get_message: true
+      get_attachment: true
+      set_message_flags: true
+      move_messages: true
+      delete_messages: true

@@ -1,0 +1,43 @@
+forms:
+  - operation_id: search_messages
+    title: Search messages
+    fields:
+      - {name: mailbox, widget_type: text, label: Mailbox, required: true}
+      - {name: filters, widget_type: json, label: Filters}
+      - {name: limit, widget_type: number, label: Limit}
+      - {name: cursor, widget_type: text, label: Cursor}
+  - operation_id: get_message
+    title: Get message
+    fields:
+      - {name: mailbox, widget_type: text, label: Mailbox, required: true}
+      - {name: uid, widget_type: number, label: UID, required: true}
+      - {name: include_body, widget_type: boolean, label: Include body}
+      - {name: include_headers, widget_type: boolean, label: Include headers}
+      - {name: include_attachment_metadata, widget_type: boolean, label: Include attachment metadata}
+      - {name: include_raw_html, widget_type: boolean, label: Include raw HTML}
+  - operation_id: get_attachment
+    title: Get attachment
+    fields:
+      - {name: mailbox, widget_type: text, label: Mailbox, required: true}
+      - {name: uid, widget_type: number, label: UID, required: true}
+      - {name: attachment_id, widget_type: text, label: Attachment ID, required: true}
+  - operation_id: set_message_flags
+    title: Set message flags
+    fields:
+      - {name: mailbox, widget_type: text, label: Mailbox, required: true}
+      - {name: uids, widget_type: json, label: UIDs, required: true}
+      - {name: seen, widget_type: boolean, label: Seen}
+      - {name: flagged, widget_type: boolean, label: Flagged}
+  - operation_id: move_messages
+    title: Move messages
+    fields:
+      - {name: source_mailbox, widget_type: text, label: Source mailbox, required: true}
+      - {name: target_mailbox, widget_type: text, label: Target mailbox, required: true}
+      - {name: uids, widget_type: json, label: UIDs, required: true}
+  - operation_id: delete_messages
+    title: Delete messages
+    fields:
+      - {name: mailbox, widget_type: text, label: Mailbox, required: true}
+      - {name: uids, widget_type: json, label: UIDs, required: true}
+      - {name: mode, widget_type: select, label: Mode}
+      - {name: confirm_permanent_delete, widget_type: boolean, label: Confirm permanent deletion}

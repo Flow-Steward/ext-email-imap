@@ -1,0 +1,92 @@
+component_id: imap_mailbox_connection
+type: connection_form
+title: IMAP mailbox connection
+description: Store non-secret IMAP settings and the mailbox password for this project.
+data:
+  connection_kind: extension
+  connection_type: imap_mailbox
+  connection_type_field: provider_preset
+  default_connection_type: manual
+  provider: imap
+  config_fields: [provider_preset, imap_host, imap_port, tls_mode, username, default_mailbox, processed_mailbox, trash_mailbox]
+  secret_fields: [password]
+  required_secret_fields: [password]
+  tags: [imap, email, mailbox]
+  test_action: test_connection
+  connection_types:
+    manual:
+      connection_type: imap_mailbox
+      defaults: {imap_host: "", imap_port: 993, tls_mode: ssl}
+    yahoo:
+      connection_type: imap_mailbox
+      defaults: {imap_host: imap.mail.yahoo.com, imap_port: 993, tls_mode: ssl}
+    fastmail:
+      connection_type: imap_mailbox
+      defaults: {imap_host: imap.fastmail.com, imap_port: 993, tls_mode: ssl}
+    zoho_personal:
+      connection_type: imap_mailbox
+      defaults: {imap_host: imap.zoho.com, imap_port: 993, tls_mode: ssl}
+    zoho_pro:
+      connection_type: imap_mailbox
+      defaults: {imap_host: imappro.zoho.com, imap_port: 993, tls_mode: ssl}
+    cpanel_shared_hosting:
+      connection_type: imap_mailbox
+      defaults: {imap_host: "", imap_port: 993, tls_mode: ssl}
+defaults:
+  display_name: IMAP Mailbox
+  provider_preset: manual
+  imap_port: 993
+  tls_mode: ssl
+fields:
+  - path: display_name
+    label: Display name
+    widget: text
+  - path: environment
+    label: Environment
+    widget: text
+  - path: provider_preset
+    label: Provider preset
+    widget: select
+    required: true
+    help: Selecting a preset fills editable host, port, and TLS defaults. Existing manual edits are preserved.
+    options:
+      - {value: manual, label: Manual setup}
+      - {value: yahoo, label: Yahoo Mail}
+      - {value: fastmail, label: Fastmail}
+      - {value: zoho_personal, label: Zoho Mail personal}
+      - {value: zoho_pro, label: Zoho Mail business}
+      - {value: cpanel_shared_hosting, label: cPanel or shared hosting}
+  - path: imap_host
+    label: IMAP host
+    widget: text
+    required: true
+  - path: imap_port
+    label: IMAP port
+    widget: integer
+    required: true
+    minimum: 1
+    maximum: 65535
+  - path: tls_mode
+    label: TLS mode
+    widget: select
+    required: true
+    options:
+      - {value: ssl, label: SSL/TLS}
+      - {value: starttls, label: STARTTLS}
+  - path: username
+    label: Username
+    widget: text
+    required: true
+  - path: password
+    label: Password
+    widget: secret
+    required: true
+  - path: default_mailbox
+    label: Default mailbox
+    widget: text
+  - path: processed_mailbox
+    label: Processed mailbox
+    widget: text
+  - path: trash_mailbox
+    label: Trash mailbox
+    widget: text

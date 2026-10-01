@@ -1,0 +1,94 @@
+manifest_version: 2
+lifecycle: {data_schema_version: 1, data_migrations: []}
+extension_id: flowsteward.imap-mailbox
+kind: tool_provider
+version: 0.1.0
+display_name: Generic IMAP Mailbox
+description: Read and explicitly post-process project-scoped generic IMAP mailboxes.
+vendor:
+  name: Flow Steward
+  support_url: https://github.com/Flow-Steward/ext-email-imap/issues
+  website_url: https://github.com/Flow-Steward/ext-email-imap
+listing:
+  category: messaging
+  tags: [imap, email, mailbox]
+  summary: Connect generic IMAP mailboxes to workflows without provider-specific OAuth.
+features: [tool, action]
+required_scopes: [extension:invoke, artifact:write]
+schemas:
+  config: schemas/config.schema.yaml
+  secrets: schemas/secrets.schema.yaml
+  subscriptions: schemas/subscriptions.schema.yaml
+  input:
+    type: object
+    properties:
+      action: {type: string}
+      request: {type: object}
+    required: [action]
+  output:
+    type: object
+    properties:
+      ok: {type: boolean}
+      result: {type: object}
+      error_code: {type: string}
+    required: [ok]
+account_scope:
+  scope_type: project
+  description: IMAP mailbox connections and password secrets are scoped to each project.
+external_effects:
+  - operation_id: set_message_flags
+    effect_kind: mailbox_message_update
+    channel: imap
+    idempotency: required
+    test_mode_behavior: suppress
+    observability:
+      target_fields: [mailbox, uids]
+      target_kind: mailbox_message
+      target_label: mailbox UID
+    rate_limit: {window_seconds: 60, account_max: 600, project_max: 300, connection_max: 120}
+  - operation_id: move_messages
+    effect_kind: mailbox_message_move
+    channel: imap
+    idempotency: required
+    test_mode_behavior: suppress
+    observability:
+      target_fields: [source_mailbox, target_mailbox, uids]
+      target_kind: mailbox_message
+      target_label: mailbox UID
+    rate_limit: {window_seconds: 60, account_max: 600, project_max: 300, connection_max: 120}
+  - operation_id: delete_messages
+    effect_kind: mailbox_message_delete
+    channel: imap
+    idempotency: required
+    test_mode_behavior: suppress
+    observability:
+      target_fields: [mailbox, uids]
+      target_kind: mailbox_message
+      target_label: mailbox UID
+    rate_limit: {window_seconds: 60, account_max: 600, project_max: 300, connection_max: 120}
+runtime:
+  extension_contract_v2:
+    connection_types: contracts/connection_types.yaml
+    operation_manifest: contracts/operation_manifest.yaml
+    step_ui_manifest: contracts/step_ui_manifest.yaml
+    resource_query_manifest: contracts/resource_query_manifest.yaml
+    artifact_policies: contracts/artifact_policies.yaml
+artifact_policies:
+  - operation_id: get_attachment
+    outputs:
+      - kind: artifact
+        value_type: artifact_handle
+        binding_key: attachment_artifact_handle
+        filename: imap-attachment.bin
+        content_type: application/octet-stream
+        max_size_bytes: 20971520
+        retention_class: run_window
+entrypoint:
+  mode: subprocess
+  command: [python3, main.py]
+health:
+  command: [python3, health.py]
+  timeout_seconds: 5
+ui_manifest: ui/ui_manifest.yaml
+action_manifest: ui/actions/actions.yaml
+python_requirements: []

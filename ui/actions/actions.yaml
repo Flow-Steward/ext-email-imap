@@ -1,0 +1,284 @@
+actions:
+  - action_id: discover_settings
+    title: Discover IMAP Settings
+    description: Inspect saved connection settings and return provider guidance without network access.
+    required_scopes: [extension:invoke]
+    handler: {mode: extension}
+    mutates_platform: false
+    workflow_visible: true
+    parameters: [{name: connection_ref, type: connection_ref, required: true}]
+    result_fields: [settings]
+    error_codes: [invalid_payload, invalid_connection, unsupported_provider, imap_command_failed, internal_error]
+    # Audit policy this extension owns: Flow Steward applies it without
+    # knowing IMAP. A failed invocation keeps codes and statuses only, plus
+    # the message UID that identifies which row failed.
+    audit:
+      failure_projection: {keep_row_fields: [uid]}
+  - action_id: test_connection
+    title: Test IMAP Connection
+    description: Authenticate to the selected IMAP mailbox and return capabilities.
+    required_scopes: [extension:invoke]
+    handler: {mode: extension}
+    mutates_platform: false
+    workflow_visible: true
+    parameters: [{name: connection_ref, type: connection_ref, required: true}]
+    result_fields:
+      - capabilities
+      - supports_idle
+      - supports_move
+      - supports_uidplus
+      - supports_condstore
+      - supports_qresync
+    error_codes:
+      - invalid_payload
+      - invalid_connection
+      - unsupported_provider
+      - authentication_failed
+      - network_blocked
+      - connection_timeout
+      - tls_verification_failed
+      - connection_failed
+      - imap_command_failed
+      - internal_error
+    # Audit policy this extension owns: Flow Steward applies it without
+    # knowing IMAP. A failed invocation keeps codes and statuses only, plus
+    # the message UID that identifies which row failed.
+    audit:
+      failure_projection: {keep_row_fields: [uid]}
+  - action_id: list_mailboxes
+    title: List Mailboxes
+    description: List the selected account mailboxes without reading message content.
+    required_scopes: [extension:invoke]
+    handler: {mode: extension}
+    mutates_platform: false
+    workflow_visible: true
+    parameters: [{name: connection_ref, type: connection_ref, required: true}]
+    result_fields: [mailboxes]
+    error_codes:
+      - invalid_payload
+      - invalid_connection
+      - unsupported_provider
+      - authentication_failed
+      - network_blocked
+      - connection_timeout
+      - tls_verification_failed
+      - connection_failed
+      - mailbox_list_too_large
+      - response_too_large
+      - imap_command_failed
+      - internal_error
+    # Audit policy this extension owns: Flow Steward applies it without
+    # knowing IMAP. A failed invocation keeps codes and statuses only, plus
+    # the message UID that identifies which row failed.
+    audit:
+      failure_projection: {keep_row_fields: [uid]}
+  - action_id: search_messages
+    title: Search Messages
+    description: Search one IMAP mailbox using typed filters.
+    required_scopes: [extension:invoke]
+    handler: {mode: extension}
+    mutates_platform: false
+    workflow_visible: true
+    parameters:
+      - {name: connection_ref, type: connection_ref, required: true}
+      - {name: mailbox, type: string, required: true}
+      - {name: filters, type: object, required: false}
+      - {name: limit, type: integer, required: false}
+      - {name: cursor, type: string, required: false}
+    result_fields: [messages, next_cursor, truncated, uidvalidity]
+    error_codes:
+      - invalid_payload
+      - invalid_connection
+      - unsupported_provider
+      - authentication_failed
+      - network_blocked
+      - connection_timeout
+      - tls_verification_failed
+      - connection_failed
+      - mailbox_not_found
+      - uidvalidity_changed
+      - response_too_large
+      - imap_command_failed
+      - internal_error
+    # Audit policy this extension owns: Flow Steward applies it without
+    # knowing IMAP. A failed invocation keeps codes and statuses only, plus
+    # the message UID that identifies which row failed.
+    # Message content must never reach the platform audit record.
+    audit:
+      failure_projection: {keep_row_fields: [uid]}
+      redact_result_fields: [body, bodyHtml, bodyText, cc, from, headers, plainText, rawHeaders, rawHtml, subject, text, to]
+  - action_id: get_message
+    title: Get Message
+    description: Read one message by UID without marking it as read.
+    required_scopes: [extension:invoke]
+    handler: {mode: extension}
+    mutates_platform: false
+    workflow_visible: true
+    parameters:
+      - {name: connection_ref, type: connection_ref, required: true}
+      - {name: mailbox, type: string, required: true}
+      - {name: uid, type: integer, required: true}
+      - {name: include_body, type: boolean, required: false}
+      - {name: include_headers, type: boolean, required: false}
+      - {name: include_attachment_metadata, type: boolean, required: false}
+      - {name: include_raw_html, type: boolean, required: false}
+    result_fields: [message]
+    error_codes:
+      - invalid_payload
+      - invalid_connection
+      - unsupported_provider
+      - authentication_failed
+      - network_blocked
+      - connection_timeout
+      - tls_verification_failed
+      - connection_failed
+      - mailbox_not_found
+      - message_not_found
+      - message_too_large
+      - message_too_complex
+      - response_too_large
+      - imap_command_failed
+      - internal_error
+    # Audit policy this extension owns: Flow Steward applies it without
+    # knowing IMAP. A failed invocation keeps codes and statuses only, plus
+    # the message UID that identifies which row failed.
+    # Message content must never reach the platform audit record.
+    audit:
+      failure_projection: {keep_row_fields: [uid]}
+      redact_result_fields: [body, bodyHtml, bodyText, cc, from, headers, plainText, rawHeaders, rawHtml, subject, text, to]
+  - action_id: get_attachment
+    title: Get Attachment
+    description: Write one selected attachment through the approved artifact output grant.
+    required_scopes: [extension:invoke, artifact:write]
+    handler: {mode: extension}
+    mutates_platform: false
+    workflow_visible: true
+    parameters:
+      - {name: connection_ref, type: connection_ref, required: true}
+      - {name: mailbox, type: string, required: true}
+      - {name: uid, type: integer, required: true}
+      - {name: attachment_id, type: string, required: true}
+    result_fields: [attachment_artifact_handle, attachment_metadata]
+    error_codes:
+      - invalid_payload
+      - invalid_connection
+      - unsupported_provider
+      - authentication_failed
+      - network_blocked
+      - connection_timeout
+      - tls_verification_failed
+      - connection_failed
+      - mailbox_not_found
+      - message_not_found
+      - message_too_large
+      - message_too_complex
+      - attachment_not_found
+      - attachment_ambiguous
+      - attachment_too_large
+      - attachment_type_disallowed
+      - artifact_output_unavailable
+      - imap_command_failed
+      - internal_error
+    # Audit policy this extension owns: Flow Steward applies it without
+    # knowing IMAP. A failed invocation keeps codes and statuses only, plus
+    # the message UID that identifies which row failed.
+    audit:
+      failure_projection: {keep_row_fields: [uid]}
+  - action_id: set_message_flags
+    title: Set Message Flags
+    description: Explicitly update Seen and Flagged state for selected message UIDs.
+    required_scopes: [extension:invoke]
+    handler: {mode: extension}
+    mutates_platform: false
+    workflow_visible: true
+    parameters:
+      - {name: connection_ref, type: connection_ref, required: true}
+      - {name: mailbox, type: string, required: true}
+      - {name: uids, type: array, required: true}
+      - {name: seen, type: boolean, required: false}
+      - {name: flagged, type: boolean, required: false}
+    result_fields: [results, external_effect_status, definitely_no_external_effect]
+    error_codes:
+      - invalid_payload
+      - invalid_connection
+      - unsupported_provider
+      - authentication_failed
+      - network_blocked
+      - connection_timeout
+      - tls_verification_failed
+      - connection_failed
+      - mailbox_not_found
+      - timeout_unknown
+      - imap_command_failed
+      - internal_error
+    # Audit policy this extension owns: Flow Steward applies it without
+    # knowing IMAP. A failed invocation keeps codes and statuses only, plus
+    # the message UID that identifies which row failed.
+    audit:
+      failure_projection: {keep_row_fields: [uid]}
+  - action_id: move_messages
+    title: Move Messages
+    description: Explicitly move selected message UIDs between IMAP mailboxes.
+    required_scopes: [extension:invoke]
+    handler: {mode: extension}
+    mutates_platform: false
+    workflow_visible: true
+    parameters:
+      - {name: connection_ref, type: connection_ref, required: true}
+      - {name: source_mailbox, type: string, required: true}
+      - {name: target_mailbox, type: string, required: true}
+      - {name: uids, type: array, required: true}
+    result_fields: [results, external_effect_status, definitely_no_external_effect]
+    error_codes:
+      - invalid_payload
+      - invalid_connection
+      - unsupported_provider
+      - authentication_failed
+      - network_blocked
+      - connection_timeout
+      - tls_verification_failed
+      - connection_failed
+      - mailbox_not_found
+      - unsafe_expunge_unsupported
+      - timeout_unknown
+      - imap_command_failed
+      - internal_error
+    # Audit policy this extension owns: Flow Steward applies it without
+    # knowing IMAP. A failed invocation keeps codes and statuses only, plus
+    # the message UID that identifies which row failed.
+    audit:
+      failure_projection: {keep_row_fields: [uid]}
+  - action_id: delete_messages
+    title: Delete Messages
+    description: Explicitly move selected message UIDs to trash or permanently delete them with confirmation.
+    required_scopes: [extension:invoke]
+    handler: {mode: extension}
+    mutates_platform: false
+    workflow_visible: true
+    parameters:
+      - {name: connection_ref, type: connection_ref, required: true}
+      - {name: mailbox, type: string, required: true}
+      - {name: uids, type: array, required: true}
+      - {name: mode, type: string, required: false}
+      - {name: confirm_permanent_delete, type: boolean, required: false}
+    result_fields: [results, external_effect_status, definitely_no_external_effect]
+    error_codes:
+      - invalid_payload
+      - invalid_connection
+      - unsupported_provider
+      - authentication_failed
+      - network_blocked
+      - connection_timeout
+      - tls_verification_failed
+      - connection_failed
+      - mailbox_not_found
+      - trash_mailbox_unavailable
+      - unsafe_expunge_unsupported
+      - timeout_unknown
+      - imap_command_failed
+      - internal_error
+    # Audit policy this extension owns: Flow Steward applies it without
+    # knowing IMAP. A failed invocation keeps codes and statuses only, plus
+    # the message UID that identifies which row failed.
+    audit:
+      failure_projection: {keep_row_fields: [uid]}

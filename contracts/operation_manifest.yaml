@@ -1,0 +1,282 @@
+operations:
+  - operation_id: discover_settings
+    display_name: Discover IMAP Settings
+    description: Inspect saved connection settings and return confirmed or manual provider guidance.
+    operation_kind: source
+    category: email
+    connection_type_ids: [imap_mailbox]
+    inputs: [{name: connection_ref, value_type: connection_ref, required: true}]
+    outputs: [{name: settings, value_type: object}]
+    result_fields: [result.settings]
+    error_codes: [invalid_payload, invalid_connection, unsupported_provider, imap_command_failed, internal_error]
+  - operation_id: test_connection
+    display_name: Test IMAP Connection
+    description: Authenticate to the selected IMAP mailbox and report supported capabilities.
+    operation_kind: source
+    category: email
+    connection_type_ids: [imap_mailbox]
+    inputs: [{name: connection_ref, value_type: connection_ref, required: true}]
+    outputs:
+      - {name: capabilities, value_type: array}
+      - {name: supports_idle, value_type: boolean}
+      - {name: supports_move, value_type: boolean}
+      - {name: supports_uidplus, value_type: boolean}
+      - {name: supports_condstore, value_type: boolean}
+      - {name: supports_qresync, value_type: boolean}
+    result_fields:
+      - result.capabilities
+      - result.supports_idle
+      - result.supports_move
+      - result.supports_uidplus
+      - result.supports_condstore
+      - result.supports_qresync
+    error_codes:
+      - invalid_payload
+      - invalid_connection
+      - unsupported_provider
+      - authentication_failed
+      - network_blocked
+      - connection_timeout
+      - tls_verification_failed
+      - connection_failed
+      - imap_command_failed
+      - internal_error
+  - operation_id: list_mailboxes
+    display_name: List Mailboxes
+    description: List the selected mailbox account folders without reading message content.
+    operation_kind: source
+    category: email
+    connection_type_ids: [imap_mailbox]
+    inputs: [{name: connection_ref, value_type: connection_ref, required: true}]
+    outputs: [{name: mailboxes, value_type: array}]
+    result_fields: [result.mailboxes]
+    error_codes:
+      - invalid_payload
+      - invalid_connection
+      - unsupported_provider
+      - authentication_failed
+      - network_blocked
+      - connection_timeout
+      - tls_verification_failed
+      - connection_failed
+      - mailbox_list_too_large
+      - response_too_large
+      - imap_command_failed
+      - internal_error
+  - operation_id: search_messages
+    display_name: Search Messages
+    description: Search a mailbox with typed filters and return a bounded UID-ordered result set.
+    operation_kind: source
+    category: email
+    connection_type_ids: [imap_mailbox]
+    inputs:
+      - {name: connection_ref, value_type: connection_ref, required: true}
+      - {name: mailbox, value_type: text, required: true}
+      - name: filters
+        value_type: object
+        required: false
+        schema:
+          type: object
+          additionalProperties: false
+          properties:
+            from: {type: string}
+            to: {type: string}
+            cc: {type: string}
+            subject: {type: string}
+            text: {type: string}
+            message_id: {type: string}
+            since: {type: string, format: date}
+            before: {type: string, format: date}
+            unseen: {type: boolean}
+            seen: {type: boolean}
+            flagged: {type: boolean}
+            unflagged: {type: boolean}
+            has_attachments: {type: boolean}
+            uid_gte: {type: integer, minimum: 1}
+            uid_lte: {type: integer, minimum: 1}
+      - {name: limit, value_type: integer, required: false}
+      - {name: cursor, value_type: text, required: false}
+    outputs:
+      - {name: messages, value_type: array}
+      - {name: next_cursor, value_type: text}
+      - {name: truncated, value_type: boolean}
+      - {name: uidvalidity, value_type: integer}
+    result_fields: [result.messages, result.next_cursor, result.truncated, result.uidvalidity]
+    error_codes:
+      - invalid_payload
+      - invalid_connection
+      - unsupported_provider
+      - authentication_failed
+      - network_blocked
+      - connection_timeout
+      - tls_verification_failed
+      - connection_failed
+      - mailbox_not_found
+      - uidvalidity_changed
+      - response_too_large
+      - imap_command_failed
+      - internal_error
+  - operation_id: get_message
+    display_name: Get Message
+    description: Read one message by IMAP UID without marking it as read.
+    operation_kind: source
+    category: email
+    connection_type_ids: [imap_mailbox]
+    inputs:
+      - {name: connection_ref, value_type: connection_ref, required: true}
+      - {name: mailbox, value_type: text, required: true}
+      - {name: uid, value_type: integer, required: true}
+      - {name: include_body, value_type: boolean, required: false}
+      - {name: include_headers, value_type: boolean, required: false}
+      - {name: include_attachment_metadata, value_type: boolean, required: false}
+      - {name: include_raw_html, value_type: boolean, required: false}
+    outputs: [{name: message, value_type: object}]
+    result_fields: [result.message]
+    error_codes:
+      - invalid_payload
+      - invalid_connection
+      - unsupported_provider
+      - authentication_failed
+      - network_blocked
+      - connection_timeout
+      - tls_verification_failed
+      - connection_failed
+      - mailbox_not_found
+      - message_not_found
+      - message_too_large
+      - message_too_complex
+      - response_too_large
+      - imap_command_failed
+      - internal_error
+  - operation_id: get_attachment
+    display_name: Get Attachment
+    description: 'Write one selected message attachment to an approved workflow artifact.
+      Choose it by exactly one of attachment_id, filename or content_type; content_type
+      accepts a wildcard such as image/*. A selector that matches nothing, or more than
+      one attachment, fails and names what the message actually carries.'
+    operation_kind: source
+    category: email
+    connection_type_ids: [imap_mailbox]
+    inputs:
+      - {name: connection_ref, value_type: connection_ref, required: true}
+      - {name: mailbox, value_type: text, required: true}
+      - {name: uid, value_type: integer, required: true}
+      - {name: attachment_id, value_type: text, required: false}
+      - {name: filename, value_type: text, required: false}
+      - {name: content_type, value_type: text, required: false}
+    outputs:
+      - {name: attachment_artifact_handle, value_type: artifact_handle}
+      - {name: attachment_metadata, value_type: object}
+    result_fields: [result.attachment_artifact_handle, result.attachment_metadata]
+    error_codes:
+      - invalid_payload
+      - invalid_connection
+      - unsupported_provider
+      - authentication_failed
+      - network_blocked
+      - connection_timeout
+      - tls_verification_failed
+      - connection_failed
+      - mailbox_not_found
+      - message_not_found
+      - message_too_large
+      - message_too_complex
+      - attachment_not_found
+      - attachment_ambiguous
+      - attachment_too_large
+      - attachment_type_disallowed
+      - artifact_output_unavailable
+      - imap_command_failed
+      - internal_error
+  - operation_id: set_message_flags
+    display_name: Set Message Flags
+    description: Explicitly update Seen and Flagged state for selected message UIDs.
+    operation_kind: action
+    category: email
+    connection_type_ids: [imap_mailbox]
+    inputs:
+      - {name: connection_ref, value_type: connection_ref, required: true}
+      - {name: mailbox, value_type: text, required: true}
+      - {name: uids, value_type: array, required: true}
+      - {name: seen, value_type: boolean, required: false}
+      - {name: flagged, value_type: boolean, required: false}
+    outputs:
+      - {name: results, value_type: array}
+      - {name: external_effect_status, value_type: text}
+      - {name: definitely_no_external_effect, value_type: boolean}
+    result_fields: [result.results, result.external_effect_status, result.definitely_no_external_effect]
+    error_codes:
+      - invalid_payload
+      - invalid_connection
+      - unsupported_provider
+      - authentication_failed
+      - network_blocked
+      - connection_timeout
+      - tls_verification_failed
+      - connection_failed
+      - mailbox_not_found
+      - timeout_unknown
+      - imap_command_failed
+      - internal_error
+  - operation_id: move_messages
+    display_name: Move Messages
+    description: Explicitly move selected message UIDs between IMAP mailboxes.
+    operation_kind: action
+    category: email
+    connection_type_ids: [imap_mailbox]
+    inputs:
+      - {name: connection_ref, value_type: connection_ref, required: true}
+      - {name: source_mailbox, value_type: text, required: true}
+      - {name: target_mailbox, value_type: text, required: true}
+      - {name: uids, value_type: array, required: true}
+    outputs:
+      - {name: results, value_type: array}
+      - {name: external_effect_status, value_type: text}
+      - {name: definitely_no_external_effect, value_type: boolean}
+    result_fields: [result.results, result.external_effect_status, result.definitely_no_external_effect]
+    error_codes:
+      - invalid_payload
+      - invalid_connection
+      - unsupported_provider
+      - authentication_failed
+      - network_blocked
+      - connection_timeout
+      - tls_verification_failed
+      - connection_failed
+      - mailbox_not_found
+      - unsafe_expunge_unsupported
+      - timeout_unknown
+      - imap_command_failed
+      - internal_error
+  - operation_id: delete_messages
+    display_name: Delete Messages
+    description: Explicitly move selected message UIDs to trash or permanently delete them with confirmation.
+    operation_kind: action
+    category: email
+    connection_type_ids: [imap_mailbox]
+    inputs:
+      - {name: connection_ref, value_type: connection_ref, required: true}
+      - {name: mailbox, value_type: text, required: true}
+      - {name: uids, value_type: array, required: true}
+      - {name: mode, value_type: text, required: false}
+      - {name: confirm_permanent_delete, value_type: boolean, required: false}
+    outputs:
+      - {name: results, value_type: array}
+      - {name: external_effect_status, value_type: text}
+      - {name: definitely_no_external_effect, value_type: boolean}
+    result_fields: [result.results, result.external_effect_status, result.definitely_no_external_effect]
+    error_codes:
+      - invalid_payload
+      - invalid_connection
+      - unsupported_provider
+      - authentication_failed
+      - network_blocked
+      - connection_timeout
+      - tls_verification_failed
+      - connection_failed
+      - mailbox_not_found
+      - trash_mailbox_unavailable
+      - unsafe_expunge_unsupported
+      - timeout_unknown
+      - imap_command_failed
+      - internal_error

@@ -1,0 +1,5 @@
+component_id: imap_mailbox_overview
+type: markdown
+title: Generic IMAP Mailbox
+content: |
+  Connect a generic IMAP mailbox to discover settings, read messages, extract attachment artifacts, and explicitly post-process selected messages.

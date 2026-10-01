@@ -1,0 +1,5 @@
+page_id: overview
+title: Generic IMAP Mailbox
+description: Use a project-scoped generic IMAP mailbox in workflows.
+components:
+  - ref: ../components/overview.yaml

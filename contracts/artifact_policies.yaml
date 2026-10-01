@@ -1,0 +1,10 @@
+policies:
+  - operation_id: get_attachment
+    outputs:
+      - kind: artifact
+        value_type: artifact_handle
+        binding_key: attachment_artifact_handle
+        filename: imap-attachment.bin
+        content_type: application/octet-stream
+        max_size_bytes: 20971520
+        retention_class: run_window
