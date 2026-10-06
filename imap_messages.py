@@ -173,8 +173,12 @@ def load_attachment(
     input_payload: Mapping[str, Any],
     *,
     max_size_bytes: int = MAX_ATTACHMENT_BYTES,
+    on_download: Callable[[str], None] | None = None,
 ) -> tuple[str, int, Attachment]:
-    """Fetch and decode one attachment, chosen by part path, filename or type."""
+    """Fetch and decode one attachment, chosen by part path, filename or type.
+
+    ``on_download`` is told the attachment's name just before its body is fetched.
+    """
     mailbox, uid = _mailbox_and_uid(input_payload)
     selector = _attachment_selector(input_payload)
 
@@ -195,6 +199,8 @@ def load_attachment(
         description="attachment metadata",
         limit_error=_message_too_large,
     )
+    if on_download is not None:
+        on_download(_safe_filename(selected.filename) or "the attachment")
     encoded_body = _fetch_bounded_literal(
         client,
         uid,

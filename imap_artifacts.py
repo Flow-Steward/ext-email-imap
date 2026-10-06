@@ -16,6 +16,15 @@ from imap_errors import ImapExtensionError
 from imap_messages import MAX_ATTACHMENT_BYTES, Attachment, load_attachment
 from imap_transport import MailboxClient
 
+try:
+    from flowsteward_extension_sdk import report_progress
+except ImportError:  # a Core with an SDK older than 0.3.0 shows no progress
+
+    def report_progress(
+        message: str = "", *, done: int | None = None, total: int | None = None
+    ) -> None:
+        return None
+
 _BINDING_KEY = "attachment_artifact_handle"
 _GRANT_CONTENT_TYPE = "application/octet-stream"
 ArtifactWriter = Callable[..., dict[str, Any]]
@@ -45,9 +54,16 @@ def get_attachment(
 ) -> dict[str, object]:
     """Write one allowed attachment only through its signed static output grant."""
     grant_limit = _validate_output_grant(payload)
-    mailbox, uid, attachment = load_attachment(client, input_payload, max_size_bytes=grant_limit)
+    report_progress("Reading the message")
+    mailbox, uid, attachment = load_attachment(
+        client,
+        input_payload,
+        max_size_bytes=grant_limit,
+        on_download=lambda name: report_progress(f"Downloading {name} from the mailbox"),
+    )
     _validate_attachment_type(attachment)
     checksum = hashlib.sha256(attachment.data).hexdigest()
+    report_progress(f"Saving {attachment.filename} ({_size_text(len(attachment.data))})")
     try:
         write_result = artifact_writer(
             payload,
@@ -74,6 +90,12 @@ def get_attachment(
             "sha256": checksum,
         },
     }
+
+
+def _size_text(size_bytes: int) -> str:
+    if size_bytes >= 1024 * 1024:
+        return f"{size_bytes / (1024 * 1024):.1f} MB"
+    return f"{max(1, round(size_bytes / 1024))} KB"
 
 
 def _validate_output_grant(payload: dict[str, Any]) -> int:

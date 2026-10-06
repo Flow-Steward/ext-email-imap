@@ -2,7 +2,7 @@ manifest_version: 2
 lifecycle: {data_schema_version: 1, data_migrations: []}
 extension_id: flowsteward.imap-mailbox
 kind: tool_provider
-version: 0.1.0
+version: 0.1.1
 display_name: Generic IMAP Mailbox
 description: Read and explicitly post-process project-scoped generic IMAP mailboxes.
 vendor:

@@ -181,6 +181,38 @@ def test_get_attachment_writes_only_selected_bytes_to_static_grant(monkeypatch) 
     assert "path" not in result
 
 
+def test_get_attachment_reports_each_stage_before_it_runs(monkeypatch) -> None:
+    import imap_artifacts
+
+    body = b"%PDF-1.7\ninvoice"
+    client = _attachment_client(body)
+    stages: list[tuple[str, int]] = []
+    monkeypatch.setattr(
+        imap_artifacts,
+        "report_progress",
+        lambda message="", **_kwargs: stages.append((message, len(client.fetches))),
+    )
+
+    get_attachment(
+        client,
+        _payload_with_output_grant(monkeypatch),
+        _attachment_input(),
+        artifact_writer=lambda _payload, data, **kwargs: {
+            "artifact_handle": "artifact:artifact-7",
+            "size_bytes": len(data),
+            "sha256": hashlib.sha256(data).hexdigest(),
+        },
+    )
+
+    fetches = len(client.fetches)
+    assert stages == [
+        ("Reading the message", 0),
+        # Announced after the structure and MIME header, before the body is fetched.
+        ("Downloading invoice.pdf from the mailbox", fetches - 1),
+        ("Saving invoice.pdf (1 KB)", fetches),
+    ]
+
+
 def test_missing_or_forged_artifact_output_fails_before_message_fetch(monkeypatch) -> None:
     for payload in ({}, _payload_with_output_grant(monkeypatch, valid=False)):
         client = _attachment_client(b"%PDF-1.7\ninvoice")
