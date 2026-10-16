@@ -75,12 +75,14 @@ _REQUIRED_FIELDS: dict[str, frozenset[str]] = {
 _SAFE_ERROR_CODES = frozenset(
     {
         "artifact_output_unavailable",
+        "attachment_ambiguous",
         "attachment_not_found",
         "attachment_too_large",
         "attachment_type_disallowed",
         "authentication_failed",
         "connection_failed",
         "connection_timeout",
+        "imap_command_failed",
         "invalid_connection",
         "invalid_payload",
         "mailbox_list_too_large",

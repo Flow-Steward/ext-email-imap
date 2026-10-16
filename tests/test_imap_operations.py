@@ -500,3 +500,115 @@ def test_main_refuses_an_envelope_of_another_contract() -> None:
     response = json.loads(completed.stdout)
     assert response["error_code"] == "invalid_host_envelope"
     assert response["definitely_no_external_effect"] is True
+
+
+# ---------------------------------------------------------------------------
+# Declared codes reach the caller
+#
+# `imap_command_failed` and `attachment_ambiguous` were declared in the manifest
+# and raised by the runtime, yet missing from the dispatcher's safe set, so every
+# caller saw `internal_error` instead. A workflow can only branch on a code that
+# actually arrives, so every declared code is driven through the dispatcher.
+# ---------------------------------------------------------------------------
+
+#: The smallest input each operation's envelope accepts.
+_MINIMAL_INPUTS: dict[str, dict[str, Any]] = {
+    "discover_settings": {},
+    "test_connection": {},
+    "list_mailboxes": {},
+    "search_messages": {"mailbox": "INBOX"},
+    "get_message": {"mailbox": "INBOX", "uid": 7},
+    "get_attachment": {"mailbox": "INBOX", "uid": 7, "attachment_id": "1"},
+    "set_message_flags": {"mailbox": "INBOX", "uids": [7], "seen": True},
+    "move_messages": {"source_mailbox": "INBOX", "target_mailbox": "Archive", "uids": [7]},
+    "delete_messages": {"mailbox": "INBOX", "uids": [7]},
+}
+
+
+def _declared_error_codes() -> list[tuple[str, str]]:
+    import yaml
+
+    operations = yaml.safe_load(
+        (BUNDLE_ROOT / "contracts" / "operation_manifest.yaml").read_text(encoding="utf-8")
+    )["operations"]
+    return [
+        (row["operation_id"], code)
+        for row in operations
+        for code in row["error_codes"]
+        # The dispatcher's own fallback, never raised as an ImapExtensionError.
+        if code != "internal_error"
+    ]
+
+
+def test_the_safe_set_is_exactly_the_declared_codes() -> None:
+    """A declared code outside the set is swallowed; an undeclared one inside it leaks."""
+    from imap_operations import _SAFE_ERROR_CODES
+
+    declared = {code for _operation_id, code in _declared_error_codes()}
+    assert declared - _SAFE_ERROR_CODES == set(), "declared codes swallowed into internal_error"
+    assert _SAFE_ERROR_CODES - declared == set(), "safe codes no operation declares"
+
+
+@pytest.mark.parametrize(
+    ("operation_id", "code"),
+    _declared_error_codes(),
+    ids=lambda value: value,
+)
+def test_every_declared_code_reaches_the_response_unchanged(
+    monkeypatch, operation_id: str, code: str
+) -> None:
+    import imap_operations
+    from imap_errors import ImapExtensionError
+
+    message = f"{code} raised by {operation_id}"
+
+    def raise_declared(*_args: object, **_kwargs: object) -> dict[str, Any]:
+        raise ImapExtensionError(code, message)
+
+    monkeypatch.setattr(imap_operations, "_dispatch_operation", raise_declared)
+    _opened, factory = _factory_for(FakeMailboxClient())
+
+    response = handle_payload(
+        _payload(operation_id, _MINIMAL_INPUTS[operation_id]), client_factory=factory
+    )
+
+    assert response["ok"] is False
+    assert response["error_code"] == code
+    assert response["error"] == message
+    assert response["errors"] == [{"code": code, "message": message}]
+
+
+def test_a_server_refusal_reaches_the_caller_as_imap_command_failed(monkeypatch) -> None:
+    import imaplib
+
+    import imap_operations
+
+    def refuse(_client: object) -> dict[str, Any]:
+        raise imaplib.IMAP4.error("LIST command error: BAD [b'Unknown command']")
+
+    monkeypatch.setattr(imap_operations, "list_mailboxes", refuse)
+    _opened, factory = _factory_for(FakeMailboxClient())
+
+    response = handle_payload(_payload("list_mailboxes"), client_factory=factory)
+
+    assert response["ok"] is False, response
+    assert response["error_code"] == "imap_command_failed"
+    assert "Unknown command" in response["error"]
+
+
+def test_a_selector_matching_two_attachments_reaches_the_caller_as_ambiguous(
+    monkeypatch,
+) -> None:
+    from test_imap_artifacts import _payload_with_output_grant
+    from test_imap_messages import _many_attachments_client
+
+    payload = _payload("get_attachment", {"mailbox": "INBOX", "uid": 21, "content_type": "image/*"})
+    payload.update(_payload_with_output_grant(monkeypatch))
+    _opened, factory = _factory_for(_many_attachments_client())
+
+    response = handle_payload(payload, client_factory=factory)
+
+    assert response["ok"] is False, response
+    assert response["error_code"] == "attachment_ambiguous"
+    assert "signature-logo.png" in response["error"]
+    assert "team-photo.jpg" in response["error"]
