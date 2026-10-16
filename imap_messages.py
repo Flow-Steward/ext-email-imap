@@ -54,7 +54,7 @@ class Attachment:
     data: bytes
 
 
-def get_message(client: MailboxClient, input_payload: Mapping[str, Any]) -> dict[str, object]:
+def get_message(client: MailboxClient, input_payload: Mapping[str, Any]) -> dict[str, Any]:
     """Read selected message fields without setting Seen or fetching attachment parts."""
     mailbox, uid = _mailbox_and_uid(input_payload)
     include_body = _boolean_option(input_payload, "include_body", default=True)
@@ -116,8 +116,7 @@ def _attachment_selector(input_payload: Mapping[str, Any]) -> tuple[str, str]:
     ]
     if not given:
         _invalid_payload(
-            "one of attachment_id, filename or content_type is required to choose "
-            "an attachment"
+            "one of attachment_id, filename or content_type is required to choose an attachment"
         )
     if len(given) > 1:
         names = ", ".join(name for name, _ in given)
@@ -547,7 +546,7 @@ def _decoded_payload(message: Message) -> bytes:
     raise ImapExtensionError("connection_failed", "The IMAP server returned invalid MIME content")
 
 
-def _attachment_metadata(part: MimePart) -> dict[str, object]:
+def _attachment_metadata(part: MimePart) -> dict[str, Any]:
     return {
         "attachment_id": part.part_path,
         "original_filename": part.filename,
@@ -578,7 +577,7 @@ def _valid_part_path(value: str) -> bool:
     )
 
 
-def _invalid_payload(message: str) -> None:
+def _invalid_payload(message: str) -> NoReturn:
     raise ImapExtensionError("invalid_payload", message)
 
 

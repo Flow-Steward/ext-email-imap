@@ -21,6 +21,22 @@ for import_root in (BUNDLE_ROOT, SDK_PARENT):
 from fake_mailbox_client import FakeMailboxClient  # noqa: E402
 from imap_operations import handle_payload  # noqa: E402
 
+#: The host contract every subprocess payload declares.
+HOST_CONTRACT_VERSION = "extension_host_v2"
+#: The final extension_host_v2 execution scope: all four keys, at most one owner.
+ROOT_STEP_SCOPE: dict[str, Any] = {
+    "group_id": None,
+    "for_each_id": None,
+    "step_id": "read_mailbox",
+    "step_execution_id": "9a8b7c6d-5e4f-4a3b-8c2d-000000000001",
+}
+GROUP_STEP_SCOPE: dict[str, Any] = {**ROOT_STEP_SCOPE, "group_id": "collect_invoices"}
+FOR_EACH_STEP_SCOPE: dict[str, Any] = {
+    **ROOT_STEP_SCOPE,
+    "for_each_id": "each_message",
+    "step_execution_id": "9a8b7c6d-5e4f-4a3b-8c2d-000000000002",
+}
+
 
 def _connection() -> dict[str, Any]:
     return {
@@ -43,6 +59,7 @@ def _payload(
     *,
     include_target: bool = True,
     test_mode: bool = False,
+    scope: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     action: dict[str, Any] = {
         "action_id": operation_id,
@@ -54,10 +71,13 @@ def _payload(
     if include_target:
         action["target"] = {"connection": _connection()}
     return {
-        "contract_version": "extension_host_v1",
+        "contract_version": HOST_CONTRACT_VERSION,
         "mode": "action",
         "action": action,
-        "runtime_context": {"test_mode": test_mode},
+        "runtime_context": {
+            **(ROOT_STEP_SCOPE if scope is None else scope),
+            "test_mode": test_mode,
+        },
     }
 
 
@@ -124,7 +144,7 @@ def test_discovery_uses_saved_connection_without_opening_transport() -> None:
 
     response = handle_payload(
         _payload("discover_settings"),
-        client_factory=forbidden_factory,
+        client_factory=forbidden_factory,  # type: ignore[arg-type]
     )
 
     assert response["ok"] is True
@@ -145,7 +165,7 @@ def test_discovery_succeeds_without_secret_grant_dns_or_transport(monkeypatch) -
     payload = _payload("discover_settings")
     del payload["action"]["target"]["connection"]["secrets"]
 
-    response = handle_payload(payload, client_factory=forbidden_factory)
+    response = handle_payload(payload, client_factory=forbidden_factory)  # type: ignore[arg-type]
 
     assert response["ok"] is True
     assert response["result"]["settings"]["provider_preset"] == "manual"
@@ -201,7 +221,7 @@ def test_mutation_test_mode_suppresses_before_connection_or_client_io() -> None:
             include_target=False,
             test_mode=True,
         ),
-        client_factory=forbidden_factory,
+        client_factory=forbidden_factory,  # type: ignore[arg-type]
     )
 
     assert response == {
@@ -346,3 +366,137 @@ def test_main_emits_one_safe_json_line_for_invalid_json() -> None:
     assert response["ok"] is False
     assert response["error_code"] == "invalid_payload"
     assert "not-json" not in completed.stdout
+
+
+# -- The final execution scope ---------------------------------------------
+
+
+def _attachment_request(scope: dict[str, Any], monkeypatch) -> dict[str, Any]:
+    from test_imap_artifacts import _attachment_input, _payload_with_output_grant
+
+    payload = _payload("get_attachment", _attachment_input(), scope=scope)
+    payload.update(_payload_with_output_grant(monkeypatch))
+    return payload
+
+
+@pytest.mark.parametrize(
+    "scope",
+    [ROOT_STEP_SCOPE, GROUP_STEP_SCOPE, FOR_EACH_STEP_SCOPE],
+    ids=["root", "group", "for_each"],
+)
+def test_an_attachment_reaches_its_artifact_for_every_owner(monkeypatch, scope) -> None:
+    import functools
+    import hashlib
+
+    import imap_artifacts
+    import imap_operations
+    from test_imap_artifacts import _attachment_client
+
+    body = b"%PDF-1.7\ninvoice"
+    writes: list[bytes] = []
+
+    def artifact_writer(_payload: Any, data: bytes, **_kwargs: Any) -> dict[str, Any]:
+        writes.append(data)
+        return {
+            "artifact_handle": "artifact:artifact-7",
+            "size_bytes": len(data),
+            "sha256": hashlib.sha256(data).hexdigest(),
+        }
+
+    monkeypatch.setattr(
+        imap_operations,
+        "get_attachment",
+        functools.partial(imap_artifacts.get_attachment, artifact_writer=artifact_writer),
+    )
+    opened, factory = _factory_for(_attachment_client(body))
+
+    response = handle_payload(_attachment_request(scope, monkeypatch), client_factory=factory)
+
+    assert response["ok"] is True, response
+    assert response["result"]["attachment_artifact_handle"] == "artifact:artifact-7"
+    assert writes == [body]
+    assert len(opened) == 1
+
+
+@pytest.mark.parametrize(
+    ("contract_version", "scope", "reason"),
+    [
+        ("extension_host_v1", FOR_EACH_STEP_SCOPE, "Unsupported host contract"),
+        ("", FOR_EACH_STEP_SCOPE, "Unsupported host contract"),
+        (
+            HOST_CONTRACT_VERSION,
+            {k: v for k, v in FOR_EACH_STEP_SCOPE.items() if k != "for_each_id"},
+            "misses execution scope",
+        ),
+        (
+            HOST_CONTRACT_VERSION,
+            {**FOR_EACH_STEP_SCOPE, "group_id": "collect_invoices"},
+            "both a Group and a For each",
+        ),
+        (
+            HOST_CONTRACT_VERSION,
+            {**ROOT_STEP_SCOPE, "step_execution_id": None},
+            "without its logical execution",
+        ),
+    ],
+    ids=["v1", "no_contract", "missing_key", "two_owners", "step_without_execution"],
+)
+@pytest.mark.parametrize("operation_id", ["get_attachment", "move_messages"])
+def test_a_foreign_or_incomplete_envelope_is_refused_before_any_effect(
+    monkeypatch, operation_id: str, contract_version: str, scope: dict[str, Any], reason: str
+) -> None:
+    import imap_operations
+
+    touched: list[str] = []
+
+    def forbidden(name: str) -> Any:
+        def call(*_args: Any, **_kwargs: Any) -> Any:
+            touched.append(name)
+            raise AssertionError(f"{name} ran for a refused envelope")
+
+        return call
+
+    monkeypatch.setattr(imap_operations, "get_attachment", forbidden("artifact_write"))
+    monkeypatch.setattr(imap_operations, "dispatch_mutation", forbidden("mutation"))
+    if operation_id == "get_attachment":
+        payload = _attachment_request(ROOT_STEP_SCOPE, monkeypatch)
+    else:
+        payload = _payload(
+            "move_messages",
+            {"source_mailbox": "INBOX", "target_mailbox": "Processed", "uids": [7]},
+        )
+    payload["contract_version"] = contract_version
+    payload["runtime_context"] = {**scope, "test_mode": False}
+
+    response = handle_payload(payload, client_factory=forbidden("imap_connection"))
+
+    assert response["ok"] is False
+    assert response["error_code"] == "invalid_host_envelope"
+    assert reason in response["error"]
+    assert response["definitely_no_external_effect"] is True
+    if operation_id == "move_messages":
+        assert response["external_effect_status"] == "failed"
+    assert touched == []
+
+
+def test_main_refuses_an_envelope_of_another_contract() -> None:
+    env = dict(os.environ)
+    env["PYTHONPATH"] = os.pathsep.join(
+        [str(BUNDLE_ROOT), str(SDK_PARENT), env.get("PYTHONPATH", "")]
+    )
+    payload = _payload("list_mailboxes")
+    payload["contract_version"] = "extension_host_v1"
+
+    completed = subprocess.run(
+        [sys.executable, str(BUNDLE_ROOT / "main.py")],
+        input=json.dumps(payload),
+        text=True,
+        capture_output=True,
+        check=False,
+        env=env,
+    )
+
+    assert completed.returncode == 2
+    response = json.loads(completed.stdout)
+    assert response["error_code"] == "invalid_host_envelope"
+    assert response["definitely_no_external_effect"] is True

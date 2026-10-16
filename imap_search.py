@@ -9,6 +9,7 @@ import json
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date
+from typing import Any, NoReturn, TypeGuard, cast
 
 from imap_errors import ImapExtensionError
 from imap_messages import _parse_headers
@@ -127,7 +128,7 @@ class SearchPlan:
     has_attachments: bool | None = None
 
 
-def list_mailboxes(client: MailboxClient) -> dict[str, list[dict[str, object]]]:
+def list_mailboxes(client: MailboxClient) -> dict[str, Any]:
     """List account folders without selecting or reading any message."""
     mailboxes: list[dict[str, object]] = []
     input_bytes = 0
@@ -140,7 +141,7 @@ def list_mailboxes(client: MailboxClient) -> dict[str, list[dict[str, object]]]:
             _mailbox_list_too_large()
         decoded_flags = [flag.decode("ascii", errors="replace") for flag in flags]
         special_use = [hint for flag, hint in _SPECIAL_USE_FLAGS.items() if flag in flags]
-        mailbox = {
+        mailbox: dict[str, object] = {
             "name": name,
             "delimiter": delimiter.decode("ascii", errors="replace")
             if delimiter is not None
@@ -166,7 +167,7 @@ def _mailbox_input_bytes(flags: Sequence[bytes], delimiter: bytes | None, name: 
     )
 
 
-def _mailbox_list_too_large() -> None:
+def _mailbox_list_too_large() -> NoReturn:
     raise ImapExtensionError(
         "mailbox_list_too_large",
         "The IMAP server mailbox list exceeds its safe limit",
@@ -209,18 +210,15 @@ def build_search_plan(
     return SearchPlan(
         criteria=tuple(criteria),
         limit=_limit(limit),
-        has_attachments=normalized_filters.get("has_attachments"),
+        has_attachments=cast("bool | None", normalized_filters.get("has_attachments")),
     )
 
 
-def search_messages(
-    client: MailboxClient, input_payload: Mapping[str, object]
-) -> dict[str, object]:
+def search_messages(client: MailboxClient, input_payload: Mapping[str, object]) -> dict[str, Any]:
     """Return UID-ascending summaries with a query-bound opaque high-water cursor."""
     if not isinstance(input_payload, Mapping):
         _invalid_payload("search input must be an object")
-    mailbox = input_payload.get("mailbox")
-    _valid_mailbox(mailbox)
+    mailbox = _valid_mailbox(input_payload.get("mailbox"))
     filters = input_payload.get("filters", {})
     normalized_filters = _normalized_filters(filters)
     query_fingerprint = _query_fingerprint(mailbox, normalized_filters)
@@ -280,7 +278,7 @@ def search_messages(
     return result
 
 
-def _normalized_filters(filters: Mapping[str, object] | None) -> dict[str, object]:
+def _normalized_filters(filters: object) -> dict[str, Any]:
     if filters is None:
         return {}
     if not isinstance(filters, Mapping) or any(not isinstance(key, str) for key in filters):
@@ -314,7 +312,7 @@ def _query_fingerprint(mailbox: str, filters: Mapping[str, object]) -> str:
     ).hexdigest()
 
 
-def _summary(uid: int, values: Mapping[bytes, object]) -> dict[str, object]:
+def _summary(uid: int, values: Mapping[bytes, object]) -> dict[str, Any]:
     size = values.get(b"RFC822.SIZE")
     flags = values.get(b"FLAGS")
     return {
@@ -352,7 +350,7 @@ def _summary_headers(values: Mapping[bytes, object]) -> dict[str, str]:
     return _parse_headers(raw_headers if isinstance(raw_headers, bytes) else b"")
 
 
-def _response_too_large() -> None:
+def _response_too_large() -> NoReturn:
     raise ImapExtensionError(
         "response_too_large",
         "The message search response exceeds its safe output limit",
@@ -449,16 +447,17 @@ def _limit(value: object) -> int:
     return value
 
 
-def _valid_mailbox(value: object) -> None:
+def _valid_mailbox(value: object) -> str:
     if not isinstance(value, str) or not value or "\r" in value or "\n" in value:
         _invalid_payload("mailbox must be a non-empty name")
+    return value
 
 
-def _positive_int(value: object) -> bool:
+def _positive_int(value: object) -> TypeGuard[int]:
     return isinstance(value, int) and not isinstance(value, bool) and value > 0
 
 
-def _non_negative_int(value: object) -> bool:
+def _non_negative_int(value: object) -> TypeGuard[int]:
     return isinstance(value, int) and not isinstance(value, bool) and value >= 0
 
 
@@ -475,5 +474,5 @@ def _decode_cursor(value: str) -> bytes:
     return base64.urlsafe_b64decode(encoded + b"=" * (-len(encoded) % 4))
 
 
-def _invalid_payload(message: str) -> None:
+def _invalid_payload(message: str) -> NoReturn:
     raise ImapExtensionError("invalid_payload", message)

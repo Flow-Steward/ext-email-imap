@@ -58,13 +58,13 @@ def _sanitize_json_value(value: Any) -> tuple[Any, bool]:
             changed = changed or item_changed
         return output, changed
     if isinstance(value, Sequence) and not isinstance(value, (bytes, bytearray)):
-        output = []
+        items: list[Any] = []
         changed = False
         for item in value:
             sanitized, item_changed = _sanitize_json_value(item)
-            output.append(sanitized)
+            items.append(sanitized)
             changed = changed or item_changed
-        return output, changed
+        return items, changed
     return value, False
 
 

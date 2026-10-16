@@ -318,9 +318,7 @@ def _single_part_client(*, include_part_mime_section: bool) -> FakeMailboxClient
             b"Content-Transfer-Encoding: quoted-printable\r\n\r\n"
         )
     body = _leaf(b"TEXT", b"PLAIN", size=64, charset=b"UTF-8")
-    return FakeMailboxClient(
-        uids=[11], bodystructures={11: body}, message_sections={11: sections}
-    )
+    return FakeMailboxClient(uids=[11], bodystructures={11: body}, message_sections={11: sections})
 
 
 def test_plain_text_message_is_read_without_a_part_mime_section() -> None:

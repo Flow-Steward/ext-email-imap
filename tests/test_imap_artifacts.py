@@ -140,7 +140,7 @@ def test_get_attachment_writes_only_selected_bytes_to_static_grant(monkeypatch) 
         _payload_with_output_grant(monkeypatch),
         _attachment_input(),
         artifact_writer=lambda _payload, data, **kwargs: (
-            writes.append((data, kwargs))
+            writes.append((data, kwargs))  # type: ignore[func-returns-value]
             or {
                 "artifact_handle": "artifact:artifact-7",
                 "size_bytes": len(data),
@@ -340,7 +340,7 @@ def test_base64_attachment_at_decoded_limit_uses_separate_encoded_fetch_budget(
         _attachment_input(),
         artifact_writer=lambda _payload, data, **_kwargs: {
             "artifact_handle": "artifact:decoded-limit",
-            "size_bytes": writes.append(len(data)) or len(data),
+            "size_bytes": writes.append(len(data)) or len(data),  # type: ignore[func-returns-value]
             "sha256": hashlib.sha256(data).hexdigest(),
         },
     )

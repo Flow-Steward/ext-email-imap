@@ -26,6 +26,7 @@ from imap_mutations import (  # noqa: E402
     set_message_flags,
 )
 from imap_transport import _StdlibMailboxClient  # noqa: E402
+from test_imap_operations import ROOT_STEP_SCOPE  # noqa: E402
 
 
 def _config(*, trash_mailbox: str = "") -> ImapConnectionConfig:
@@ -536,7 +537,7 @@ def test_copy_delete_partial_failure_is_timeout_unknown_and_not_retried() -> Non
 def test_test_mode_suppresses_before_client_factory() -> None:
     factory = Mock(side_effect=AssertionError("no connection"))
     payload = {
-        "runtime_context": {"test_mode": True},
+        "runtime_context": {**ROOT_STEP_SCOPE, "test_mode": True},
         "action": {"action_id": "move_messages", "input": {"uids": [7]}},
     }
 
@@ -553,7 +554,7 @@ def test_test_mode_suppresses_before_client_factory() -> None:
 def test_dispatch_opens_one_client_and_routes_validated_input() -> None:
     client = _client(uids=[7])
     payload = {
-        "runtime_context": {"test_mode": False},
+        "runtime_context": {**ROOT_STEP_SCOPE, "test_mode": False},
         "action": {
             "action_id": "set_message_flags",
             "input": {

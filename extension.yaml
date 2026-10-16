@@ -2,7 +2,7 @@ manifest_version: 2
 lifecycle: {data_schema_version: 1, data_migrations: []}
 extension_id: flowsteward.imap-mailbox
 kind: tool_provider
-version: 0.1.1
+version: 0.2.0
 display_name: Generic IMAP Mailbox
 description: Read and explicitly post-process project-scoped generic IMAP mailboxes.
 vendor:
@@ -67,6 +67,7 @@ external_effects:
       target_label: mailbox UID
     rate_limit: {window_seconds: 60, account_max: 600, project_max: 300, connection_max: 120}
 runtime:
+  contract_version: extension_host_v2
   extension_contract_v2:
     connection_types: contracts/connection_types.yaml
     operation_manifest: contracts/operation_manifest.yaml

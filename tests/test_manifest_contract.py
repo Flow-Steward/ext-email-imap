@@ -543,3 +543,16 @@ def test_dispatch_level_codes_are_declared_by_every_operation(bundle_payloads) -
         assert {"internal_error", "imap_command_failed"} <= set(row["error_codes"]), row[
             "action_id"
         ]
+
+
+def test_the_logo_is_a_small_square_png() -> None:
+    """Core requires icon.png beside extension.yaml: PNG, square, 32-512 px, <= 100 KB."""
+    import struct
+
+    data = (BUNDLE_ROOT / "icon.png").read_bytes()
+    assert data[:8] == b"\x89PNG\r\n\x1a\n"
+    assert data[12:16] == b"IHDR"
+    width, height = struct.unpack(">II", data[16:24])
+    assert width == height
+    assert 32 <= width <= 512
+    assert len(data) <= 100 * 1024

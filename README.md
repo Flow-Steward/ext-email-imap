@@ -9,6 +9,18 @@ Use the official Gmail or Microsoft connector for Gmail, Google Workspace,
 Outlook.com, or Microsoft 365. This extension rejects their known public mailbox
 domains and hosts instead of attempting a password or OAuth fallback.
 
+Logo: `icon.png` (the Flow Steward wave mark), next to `extension.yaml`.
+
+## Requirements
+
+This release (0.2.0) speaks the host contract `extension_host_v2` with its final
+execution scope (`group_id`, `for_each_id`, `step_id`, `step_execution_id`)
+and is built on `flowsteward-extension-sdk` 0.4.0. A request with another
+contract, a missing scope key, or both a Group and a For each as its owner is
+refused with `invalid_host_envelope` before the mailbox is opened or an artifact
+is written. Install it on a Flow Steward Core that speaks this contract; an older
+Core does not run it.
+
 ## Configure a connection
 
 Create an `imap_mailbox` project connection. Store the mailbox or provider app

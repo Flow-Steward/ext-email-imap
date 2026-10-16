@@ -178,10 +178,10 @@ class _PinnedIMAP4(imaplib.IMAP4):
             ):
                 self._list_limit_exceeded = True
                 raise _MailboxListLimitExceeded("IMAP mailbox list exceeds its bounded size")
-        super()._append_untagged(typ, dat)
+        super()._append_untagged(typ, dat)  # type: ignore[misc]
 
     def _force_close(self) -> None:
-        file_handles = {getattr(self, "_file", None)}
+        file_handles: set[Any] = {getattr(self, "_file", None)}
         if not isinstance(vars(imaplib.IMAP4).get("file"), property):
             file_handles.add(getattr(self, "file", None))
         for file_handle in file_handles - {None}:
@@ -206,8 +206,8 @@ class _StdlibMailboxClient:
     ) -> list[tuple[tuple[bytes, ...], bytes | None, str]]:
         try:
             status, rows = self._connection.list(
-                _quote_mailbox_name(directory),
-                _quote_mailbox_name(pattern),
+                _quote_mailbox_name(directory),  # type: ignore[arg-type]
+                _quote_mailbox_name(pattern),  # type: ignore[arg-type]
             )
         except imaplib.IMAP4.abort as exc:
             if not self._connection._list_limit_exceeded:
@@ -222,16 +222,16 @@ class _StdlibMailboxClient:
         return [_parse_list_response(row) for row in rows or [] if isinstance(row, bytes)]
 
     def select_folder(self, folder: str, readonly: bool = False) -> dict[bytes, object]:
-        status, _rows = self._connection.select(_quote_mailbox_name(folder), readonly=readonly)
+        status, _rows = self._connection.select(_quote_mailbox_name(folder), readonly=readonly)  # type: ignore[arg-type]
         _require_ok(status, "select folder")
         result: dict[bytes, object] = {}
         for name, values in self._connection.untagged_responses.items():
             key = name.encode("ascii")
             if name in {"EXISTS", "RECENT", "UIDNEXT", "UIDVALIDITY", "HIGHESTMODSEQ"}:
                 if values:
-                    result[key] = int(values[-1])
+                    result[key] = int(values[-1])  # type: ignore[arg-type]
             elif name == "FLAGS" and values:
-                result[key] = tuple(values[-1].strip(b"()").split())
+                result[key] = tuple(values[-1].strip(b"()").split())  # type: ignore[union-attr]
             elif name == "READ-WRITE":
                 result[key] = True
         return result
@@ -241,7 +241,7 @@ class _StdlibMailboxClient:
     ) -> list[int]:
         items: Sequence[object] = [criteria] if isinstance(criteria, str) else criteria
         encoded = tuple(_encode_search_item(item) for item in items)
-        status, rows = self._connection.uid("SEARCH", charset, *encoded)
+        status, rows = self._connection.uid("SEARCH", charset, *encoded)  # type: ignore[arg-type]
         _require_ok(status, "search")
         return [int(value) for row in rows or [] if row for value in row.split()]
 
@@ -307,7 +307,7 @@ class _StdlibMailboxClient:
         return _parse_flag_rows(rows or [])
 
     def _uid_command(self, command: str, *arguments: str | bytes) -> bytes:
-        status, rows = self._connection.uid(command, *arguments)
+        status, rows = self._connection.uid(command, *arguments)  # type: ignore[arg-type]
         _require_ok(status, command.lower())
         return b" ".join(row for row in rows or [] if isinstance(row, bytes))
 
@@ -411,7 +411,7 @@ def _assert_selected_peer(sock: socket.socket, selected_pin: str) -> None:
 
 
 def _set_imap_file(connection: _PinnedIMAP4, file_handle: Any) -> None:
-    connection._file = file_handle
+    connection._file = file_handle  # type: ignore[attr-defined]
     file_descriptor = vars(imaplib.IMAP4).get("file")
     if not isinstance(file_descriptor, property) or file_descriptor.fset is not None:
         connection.file = file_handle

@@ -134,7 +134,7 @@ def test_fetch_parser_attaches_bodystructure_trailer_after_header_literal_to_sam
     assert parsed[17][b"UID"] == 17
     assert parsed[17][b"RFC822.SIZE"] == 1234
     assert parsed[17][b"FLAGS"] == (b"\\Seen",)
-    assert parsed[17][b"BODYSTRUCTURE"][2] == b"MIXED"
+    assert parsed[17][b"BODYSTRUCTURE"][2] == b"MIXED"  # type: ignore[index]
     assert parsed[17][b"BODY[HEADER.FIELDS (DATE FROM TO CC SUBJECT MESSAGE-ID)]"] == (
         b"Date: Tue, 1 Jan 2026 00:00:00 +0000\r\n\r\n"
     )
@@ -151,7 +151,7 @@ def test_fetch_parser_does_not_attach_a_trailer_to_a_previous_uid_after_new_fetc
     )
 
     assert b"BODYSTRUCTURE" not in parsed[17]
-    assert parsed[18][b"BODYSTRUCTURE"][0:2] == (b"APPLICATION", b"PDF")
+    assert parsed[18][b"BODYSTRUCTURE"][0:2] == (b"APPLICATION", b"PDF")  # type: ignore[index]
 
 
 @pytest.mark.parametrize(
@@ -249,7 +249,7 @@ def test_fetch_parser_handles_mixed_case_metadata_and_bodystructure_trailer() ->
     assert parsed[7][b"RFC822.SIZE"] == 1234
     assert parsed[7][b"FLAGS"] == (b"\\Seen",)
     assert parsed[7][b"BODY[HEADER.FIELDS (SUBJECT)]"] == b"Subject: invoice\r\n\r\n"
-    assert parsed[7][b"BODYSTRUCTURE"][:2] == (b"APPLICATION", b"PDF")
+    assert parsed[7][b"BODYSTRUCTURE"][:2] == (b"APPLICATION", b"PDF")  # type: ignore[index]
 
 
 def test_bodystructure_parser_rejects_oversized_response_before_tree_construction() -> None:
@@ -315,8 +315,8 @@ def test_transport_bounds_response_line_read_before_materialization() -> None:
             return b"x" * limit
 
     connection = object.__new__(_PinnedIMAP4)
-    connection.file = OversizedLine()
-    connection._file = connection.file
+    connection.file = OversizedLine()  # type: ignore[assignment]
+    connection._file = connection.file  # type: ignore[attr-defined]
 
     with pytest.raises(imaplib.IMAP4.error, match="response line exceeds"):
         connection.readline()

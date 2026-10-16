@@ -3,7 +3,7 @@ from __future__ import annotations
 import imaplib
 from collections.abc import Callable, Mapping, Sequence
 from contextlib import AbstractContextManager
-from typing import Any
+from typing import Any, NoReturn
 
 from imap_config import ImapConnectionConfig, connection_config_from_payload
 from imap_errors import ImapExtensionError
@@ -19,7 +19,7 @@ def set_message_flags(
     client: MailboxClient,
     config: ImapConnectionConfig,
     input_payload: Mapping[str, Any],
-) -> dict[str, object]:
+) -> dict[str, Any]:
     """Set Seen/Flagged state through one UID STORE state machine per message."""
     del config
     payload = _input_mapping(input_payload)
@@ -51,7 +51,7 @@ def move_messages(
     client: MailboxClient,
     config: ImapConnectionConfig,
     input_payload: Mapping[str, Any],
-) -> dict[str, object]:
+) -> dict[str, Any]:
     """Move messages with UID MOVE or a UIDPLUS-scoped copy/delete fallback."""
     del config
     payload = _input_mapping(input_payload)
@@ -67,7 +67,7 @@ def delete_messages(
     client: MailboxClient,
     config: ImapConnectionConfig,
     input_payload: Mapping[str, Any],
-) -> dict[str, object]:
+) -> dict[str, Any]:
     """Move messages to a trusted trash mailbox or UID-expunge them explicitly."""
     payload = _input_mapping(input_payload)
     mailbox = _mailbox(payload.get("mailbox"), field="mailbox")
@@ -102,7 +102,7 @@ def dispatch_mutation(
     payload: Mapping[str, Any],
     *,
     client_factory: ClientFactory = open_mailbox_client,
-) -> dict[str, object]:
+) -> dict[str, Any]:
     """Dispatch one mutation, suppressing test mode before connection resolution."""
     root = _input_mapping(payload)
     operation = _operation_id(root)
@@ -130,7 +130,7 @@ def _move_validated(
     source: str,
     target: str,
     uids: list[int],
-) -> dict[str, object]:
+) -> dict[str, Any]:
     capabilities = _capabilities(client)
     use_move = b"MOVE" in capabilities
     if not use_move:
@@ -158,7 +158,7 @@ def _run_uid_batch(
     steps_for_uid: Callable[[int], Sequence[MutationStep]],
     *,
     command_errors_are_ambiguous: bool = False,
-) -> dict[str, object]:
+) -> dict[str, Any]:
     # Build every command only after public validation and before any command can
     # reach the server. Exceptions below therefore occur at the mutation boundary.
     commands_by_uid = [(uid, tuple(steps_for_uid(uid))) for uid in uids]
@@ -201,7 +201,7 @@ def _run_uid_batch(
     return _aggregate_results(results)
 
 
-def _aggregate_results(results: list[dict[str, object]]) -> dict[str, object]:
+def _aggregate_results(results: list[dict[str, object]]) -> dict[str, Any]:
     statuses = {row["status"] for row in results}
     if "timeout_unknown" in statuses or statuses == {"succeeded", "failed"}:
         status = "timeout_unknown"
@@ -349,5 +349,5 @@ def _input_mapping(value: object) -> Mapping[str, Any]:
     return value
 
 
-def _invalid(message: str) -> None:
+def _invalid(message: str) -> NoReturn:
     raise ImapExtensionError("invalid_payload", message)

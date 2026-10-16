@@ -5,7 +5,7 @@ from __future__ import annotations
 import imaplib
 from collections.abc import Callable, Mapping
 from contextlib import AbstractContextManager
-from typing import Any
+from typing import Any, NoReturn
 
 from flowsteward_extension_sdk import runtime_context_from_payload
 from imap_artifacts import get_attachment
@@ -107,6 +107,12 @@ def handle_payload(
 ) -> dict[str, Any]:
     """Validate and execute one host action envelope with stable safe responses."""
     operation_id = _untrusted_operation_id(payload)
+    # The host envelope is checked before anything is read or sent: another
+    # contract, a missing execution-scope key or two owners is refused here.
+    try:
+        runtime_context_from_payload(payload if isinstance(payload, dict) else None)
+    except ValueError as exc:
+        return _invalid_host_envelope_response(operation_id, str(exc))
     try:
         root, operation_id, input_payload = _validated_action_envelope(payload)
         result = _dispatch_operation(
@@ -182,7 +188,6 @@ def _validated_action_envelope(
         and not isinstance(runtime.get("test_mode"), bool)
     ):
         _invalid_payload("runtime_context.test_mode must be a boolean")
-    runtime_context_from_payload(root)
     return root, operation_id, input_payload
 
 
@@ -192,7 +197,7 @@ def _dispatch_operation(
     operation_id: str,
     input_payload: dict[str, Any],
     client_factory: ClientFactory,
-) -> dict[str, object]:
+) -> dict[str, Any]:
     if operation_id in MUTATION_OPERATIONS:
         return dispatch_mutation(payload, client_factory=client_factory)
 
@@ -213,7 +218,7 @@ def _dispatch_operation(
     raise AssertionError("validated operation was not dispatched")
 
 
-def _connection_capabilities(client: MailboxClient) -> dict[str, object]:
+def _connection_capabilities(client: MailboxClient) -> dict[str, Any]:
     capabilities = sorted(
         {value.decode("ascii", errors="replace").upper() for value in client.capabilities()}
     )
@@ -263,6 +268,25 @@ def _imap_error_response(
     return response
 
 
+def _invalid_host_envelope_response(operation_id: str, message: str) -> dict[str, Any]:
+    """Refuse a request this extension does not speak, before any operation runs.
+
+    It is answered ahead of every operation, so no operation declares the code.
+    """
+    code = "invalid_host_envelope"
+    response: dict[str, Any] = {
+        "ok": False,
+        "result": {},
+        "error_code": code,
+        "error": message,
+        "errors": [{"code": code, "message": message}],
+        "definitely_no_external_effect": True,
+    }
+    if operation_id in MUTATION_OPERATIONS:
+        response["external_effect_status"] = "failed"
+    return response
+
+
 def _internal_error_response(operation_id: str) -> dict[str, Any]:
     response: dict[str, Any] = {
         "ok": False,
@@ -292,7 +316,7 @@ def _untrusted_operation_id(payload: object) -> str:
     return value if isinstance(value, str) and value in MUTATION_OPERATIONS else ""
 
 
-def _invalid_payload(message: str) -> None:
+def _invalid_payload(message: str) -> NoReturn:
     raise ImapExtensionError("invalid_payload", message)
 
 

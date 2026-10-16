@@ -5,7 +5,7 @@ import math
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, NoReturn
 
 from imap_errors import ImapExtensionError
 
@@ -51,7 +51,7 @@ PRESETS: dict[str, dict[str, object]] = {
         "imap_port": 993,
         "tls_mode": "ssl",
         "username_guidance": _MESSAGE_USE_THE_FULL_EMAIL_ADDRESS,
-        "password_guidance": "Use an app password.",
+        "password_guidance": "Use an app password.",  # nosec B105 - user guidance, not a secret
     },
     "fastmail": {
         "provider_preset": "fastmail",
@@ -59,7 +59,7 @@ PRESETS: dict[str, dict[str, object]] = {
         "imap_port": 993,
         "tls_mode": "ssl",
         "username_guidance": _MESSAGE_USE_THE_FULL_EMAIL_ADDRESS,
-        "password_guidance": "Use an app password.",
+        "password_guidance": "Use an app password.",  # nosec B105 - user guidance, not a secret
     },
     "zoho_personal": {
         "provider_preset": "zoho_personal",
@@ -156,7 +156,7 @@ def _validated_connection_config(
         _invalid_connection()
     username = _required_text(config.get("username"))
     _reject_control_characters(username)
-    password = ""
+    password = ""  # nosec B105 - empty until the secret is read
     if require_password:
         password_value = _as_mapping(connection.get("secrets")).get("password")
         if not isinstance(password_value, str) or not password_value:
@@ -179,7 +179,7 @@ def _validated_connection_config(
     )
 
 
-def discover_settings(config: ImapConnectionConfig) -> dict[str, object]:
+def discover_settings(config: ImapConnectionConfig) -> dict[str, Any]:
     """Return local preset guidance only; this function deliberately performs no I/O."""
     provider_preset = config.provider_preset
     if provider_preset == "manual":
@@ -362,5 +362,5 @@ def _as_mapping(value: Any) -> dict[str, Any]:
     return dict(value) if isinstance(value, Mapping) else {}
 
 
-def _invalid_connection() -> None:
+def _invalid_connection() -> NoReturn:
     raise ImapExtensionError("invalid_connection", "IMAP connection configuration is invalid.")

@@ -4,26 +4,18 @@ from __future__ import annotations
 
 import hashlib
 from collections.abc import Callable, Mapping
-from typing import Any
+from typing import Any, NoReturn
 
 from flowsteward_extension_sdk import (
     ArtifactAccessError,
     find_artifact_descriptor,
+    report_progress,
     write_artifact_bytes,
 )
 from flowsteward_extension_sdk.http import verified_platform_grant_signature
 from imap_errors import ImapExtensionError
 from imap_messages import MAX_ATTACHMENT_BYTES, Attachment, load_attachment
 from imap_transport import MailboxClient
-
-try:
-    from flowsteward_extension_sdk import report_progress
-except ImportError:  # a Core with an SDK older than 0.3.0 shows no progress
-
-    def report_progress(
-        message: str = "", *, done: int | None = None, total: int | None = None
-    ) -> None:
-        return None
 
 _BINDING_KEY = "attachment_artifact_handle"
 _GRANT_CONTENT_TYPE = "application/octet-stream"
@@ -51,7 +43,7 @@ def get_attachment(
     input_payload: Mapping[str, Any],
     *,
     artifact_writer: ArtifactWriter = write_artifact_bytes,
-) -> dict[str, object]:
+) -> dict[str, Any]:
     """Write one allowed attachment only through its signed static output grant."""
     grant_limit = _validate_output_grant(payload)
     report_progress("Reading the message")
@@ -162,7 +154,7 @@ def _artifact_output_unavailable() -> ImapExtensionError:
     )
 
 
-def _attachment_type_disallowed() -> None:
+def _attachment_type_disallowed() -> NoReturn:
     raise ImapExtensionError(
         "attachment_type_disallowed",
         "The selected attachment type is not allowed",

@@ -214,7 +214,7 @@ def test_discovery_config_validates_non_secret_settings_without_password_or_netw
     monkeypatch.setattr(socket, "create_connection", lambda *_a, **_k: pytest.fail("network"))
     monkeypatch.setattr(socket, "getaddrinfo", lambda *_a, **_k: pytest.fail("dns"))
     payload = _payload(secrets={})
-    del payload["action"]["target"]["connection"]["secrets"]
+    del payload["action"]["target"]["connection"]["secrets"]  # type: ignore[index]
 
     config = discovery_config_from_payload(payload)
 
@@ -358,7 +358,7 @@ def test_rejects_connection_ref_that_does_not_match_injected_identity() -> None:
 
 def test_rejects_wrong_connection_type() -> None:
     payload = _payload()
-    payload["action"]["target"]["connection"]["connection_type_id"] = "smtp"
+    payload["action"]["target"]["connection"]["connection_type_id"] = "smtp"  # type: ignore[index]
 
     with pytest.raises(ImapExtensionError) as error:
         connection_config_from_payload(payload)
