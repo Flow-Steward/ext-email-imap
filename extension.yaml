@@ -2,9 +2,14 @@ manifest_version: 2
 lifecycle: {data_schema_version: 1, data_migrations: []}
 extension_id: flowsteward.imap-mailbox
 kind: tool_provider
-version: 0.2.1
+version: 0.2.2
 display_name: Generic IMAP Mailbox
-description: Read and explicitly post-process project-scoped generic IMAP mailboxes.
+description: |-
+  Generic IMAP Mailbox brings email from Fastmail, Yahoo, Zoho, shared hosting and other compatible IMAP servers into Flow Steward workflows. List folders, search by sender, subject, date or read state, read selected messages and download their attachments for later steps. Reading a message leaves its read state unchanged, so your workflow can decide when processing is complete.
+
+  Build invoice intake, document collection or mailbox triage workflows by passing attachments to document extraction or tabular processing. Once downstream work succeeds, update read or starred flags, move messages into a processed folder or send them to trash. Permanent deletion is available as a separate, explicitly confirmed operation where the server supports it.
+
+  Create a project connection using the provider's IMAP host, port, SSL or STARTTLS mode, username and password or app password. Provider presets help with initial settings, and a connection test confirms access. This connector handles incoming mail; outbound messages use a separate email connection. Use dedicated connectors for Gmail and Microsoft mailboxes. Attachments support approved file types up to 20 MiB, and production connections require publicly reachable server addresses.
 vendor:
   name: Flow Steward
   support_url: https://github.com/Flow-Steward/ext-email-imap/issues
@@ -12,7 +17,10 @@ vendor:
 listing:
   category: messaging
   tags: [imap, email, mailbox]
-  summary: Connect generic IMAP mailboxes to workflows without provider-specific OAuth.
+  summary: |-
+    Search generic IMAP mailboxes, read messages and attachments, then update flags, move messages or send them to trash.
+  setup_summary: |-
+    Create an imap_mailbox project connection with host, port, SSL or STARTTLS, username and a password or provider app password stored as a secret, then run Test Connection. Configure processed and trash folder names when your workflow moves or deletes messages.
 features: [tool, action]
 required_scopes: [extension:invoke, artifact:write]
 schemas:

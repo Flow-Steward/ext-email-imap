@@ -1,9 +1,10 @@
 # Generic IMAP Mailbox
 
-`flowsteward.imap-mailbox` reads and explicitly post-processes mail through a
-project-scoped IMAP connection. It is intended for providers that do not have a
-dedicated Flow Steward connector, including Fastmail, Yahoo, Zoho, shared-hosting
-mailboxes, and self-hosted IMAP servers.
+Generic IMAP Mailbox brings email from Fastmail, Yahoo, Zoho, shared hosting and other compatible IMAP servers into Flow Steward workflows. List folders, search by sender, subject, date or read state, read selected messages and download their attachments for later steps. Reading a message leaves its read state unchanged, so your workflow can decide when processing is complete.
+
+Build invoice intake, document collection or mailbox triage workflows by passing attachments to document extraction or tabular processing. Once downstream work succeeds, update read or starred flags, move messages into a processed folder or send them to trash. Permanent deletion is available as a separate, explicitly confirmed operation where the server supports it.
+
+Create a project connection using the provider's IMAP host, port, SSL or STARTTLS mode, username and password or app password. Provider presets help with initial settings, and a connection test confirms access. This connector handles incoming mail; outbound messages use a separate email connection. Use dedicated connectors for Gmail and Microsoft mailboxes. Attachments support approved file types up to 20 MiB, and production connections require publicly reachable server addresses.
 
 Use the official Gmail or Microsoft connector for Gmail, Google Workspace,
 Outlook.com, or Microsoft 365. This extension rejects their known public mailbox
@@ -13,7 +14,7 @@ Logo: `icon.png` (the Flow Steward wave mark), next to `extension.yaml`.
 
 ## Requirements
 
-This release (0.2.1) speaks the host contract `extension_host_v2` with its final
+This release (0.2.2) speaks the host contract `extension_host_v2` with its final
 execution scope (`group_id`, `for_each_id`, `step_id`, `step_execution_id`)
 and is built on `flowsteward-extension-sdk` 0.4.0. A request with another
 contract, a missing scope key, or both a Group and a For each as its owner is
