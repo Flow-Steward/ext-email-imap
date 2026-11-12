@@ -14,7 +14,7 @@ Logo: `icon.png` (the Flow Steward wave mark), next to `extension.yaml`.
 
 ## Requirements
 
-This release (0.2.2) speaks the host contract `extension_host_v2` with its final
+This release (0.2.3) speaks the host contract `extension_host_v2` with its final
 execution scope (`group_id`, `for_each_id`, `step_id`, `step_execution_id`)
 and is built on `flowsteward-extension-sdk` 0.4.0. A request with another
 contract, a missing scope key, or both a Group and a For each as its owner is
@@ -68,6 +68,28 @@ external mailbox effect succeeded, failed before any effect, or may be ambiguous
 This is an IMAP-only extension. It does not implement SMTP or send mail. Route
 outbound messages through the separately configured outgoing-email or official
 provider connector so read credentials and send credentials remain independent.
+
+### Attachment size metadata
+
+`Get Message` reports each attachment's `size_bytes` from the MIME part size in
+IMAP `BODYSTRUCTURE`. The response includes `size_bytes_basis: "bodystructure_octets"`
+to make clear that this is the server-reported encoded MIME-part octet count. It is
+metadata only; `Get Message` does not fetch an attachment body just to calculate it.
+
+`Get Attachment` reports `attachment_metadata.size_bytes` as the number of bytes in
+the selected decoded payload that it writes. The two values can differ for
+base64- or quoted-printable-encoded attachments. Use the `Get Attachment` value
+when you need the decoded payload size.
+
+### Attachment presentation
+
+The installed `get_attachment` output policy opts into the host's presentation
+claim using `attachment_presentation`. After the SDK confirms the write, the
+terminal result identifies the prepared output and supplies the validated source
+filename, MIME type, decoded size and checksum. The host independently checks
+this claim against its prepared output and finalized bytes before accepting it.
+Upload grants remain `application/octet-stream`; output-ready notifications
+remain ID-only. Business `attachment_metadata` is separate from host authority.
 
 ### Attachment handoff
 

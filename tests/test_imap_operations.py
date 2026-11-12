@@ -398,6 +398,9 @@ def test_an_attachment_reaches_its_artifact_for_every_owner(monkeypatch, scope) 
     def artifact_writer(_payload: Any, data: bytes, **_kwargs: Any) -> dict[str, Any]:
         writes.append(data)
         return {
+            "artifact_id": "artifact-7",
+            "binding_key": "attachment_artifact_handle",
+            "content_type": "application/octet-stream",
             "artifact_handle": "artifact:artifact-7",
             "size_bytes": len(data),
             "sha256": hashlib.sha256(data).hexdigest(),
@@ -414,6 +417,14 @@ def test_an_attachment_reaches_its_artifact_for_every_owner(monkeypatch, scope) 
 
     assert response["ok"] is True, response
     assert response["result"]["attachment_artifact_handle"] == "artifact:artifact-7"
+    assert response["result"]["attachment_presentation"] == {
+        "artifact_id": "artifact-7",
+        "binding_key": "attachment_artifact_handle",
+        "filename": "invoice.pdf",
+        "content_type": "application/pdf",
+        "size_bytes": len(body),
+        "sha256": hashlib.sha256(body).hexdigest(),
+    }
     assert writes == [body]
     assert len(opened) == 1
 

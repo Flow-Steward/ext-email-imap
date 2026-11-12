@@ -193,6 +193,10 @@ class _PinnedIMAP4(imaplib.IMAP4):
                 sock.close()
 
 
+class ImapTaggedTryCreate(imaplib.IMAP4.error):
+    """A tagged NO response explicitly carried the TRYCREATE response code."""
+
+
 class _StdlibMailboxClient:
     def __init__(self, connection: _PinnedIMAP4) -> None:
         self._connection = connection
@@ -308,6 +312,18 @@ class _StdlibMailboxClient:
 
     def _uid_command(self, command: str, *arguments: str | bytes) -> bytes:
         status, rows = self._connection.uid(command, *arguments)  # type: ignore[arg-type]
+        if (
+            command in {"MOVE", "COPY"}
+            and status == "NO"
+            and any(
+                isinstance(row, bytes)
+                and re.match(rb"^\[TRYCREATE\](?:[ \t]|$)", row, re.IGNORECASE)
+                for row in rows or []
+            )
+        ):
+            # Keep response data private: only the allowlisted code crosses this
+            # boundary, never arbitrary server-provided text.
+            raise ImapTaggedTryCreate("IMAP server returned TRYCREATE")
         _require_ok(status, command.lower())
         return b" ".join(row for row in rows or [] if isinstance(row, bytes))
 

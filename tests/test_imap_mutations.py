@@ -65,9 +65,14 @@ def _client(
 
 
 class _TaggedNoMoveConnection:
-    capabilities = ("IMAP4REV1", "MOVE")
-
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        *,
+        capabilities: tuple[str, ...] = ("IMAP4REV1", "MOVE"),
+        rows: list[bytes] | None = None,
+    ) -> None:
+        self.capabilities = capabilities
+        self.rows = rows or [b"MOVE failed after a possible partial move"]
         self.untagged_responses = {"UIDVALIDITY": [b"42"]}
         self.uid_calls: list[tuple[str, tuple[object, ...]]] = []
 
@@ -77,7 +82,7 @@ class _TaggedNoMoveConnection:
 
     def uid(self, command: str, *arguments: object) -> tuple[str, list[bytes]]:
         self.uid_calls.append((command, arguments))
-        return "NO", [b"MOVE failed after a possible partial move"]
+        return "NO", self.rows
 
 
 class _CancellationSignal(BaseException):
@@ -367,6 +372,73 @@ def test_real_transport_uid_move_tagged_no_is_ambiguous_and_stops_batch() -> Non
         "definitely_no_external_effect": False,
     }
     assert connection.uid_calls == [("MOVE", ("3", b'"Processed"'))]
+    assert "guidance" not in result
+
+
+@pytest.mark.parametrize(
+    ("capabilities", "expected_command"),
+    [
+        (("IMAP4REV1", "MOVE"), "MOVE"),
+        (("IMAP4REV1", "UIDPLUS"), "COPY"),
+    ],
+)
+def test_actual_tagged_trycreate_guides_without_claiming_no_effect_or_retry(
+    capabilities: tuple[str, ...], expected_command: str
+) -> None:
+    raw_detail = b"[TRYCREATE] synthetic mailbox detail"
+    connection = _TaggedNoMoveConnection(capabilities=capabilities, rows=[raw_detail])
+    client = _StdlibMailboxClient(cast(Any, connection))
+
+    result = move_messages(
+        client,
+        _config(),
+        {"source_mailbox": "INBOX", "target_mailbox": "Processed", "uids": [3, 7]},
+    )
+
+    assert result["results"] == [
+        {"uid": 3, "status": "timeout_unknown", "error_code": "timeout_unknown"},
+        {
+            "uid": 7,
+            "status": "failed",
+            "error_code": "not_attempted_after_timeout_unknown",
+        },
+    ]
+    assert result["external_effect_status"] == "timeout_unknown"
+    assert result["definitely_no_external_effect"] is False
+    assert result["guidance"] == (
+        "The server returned TRYCREATE for a mailbox transfer. The destination mailbox may need "
+        "to be created or selected. The transfer outcome is unknown; verify the message location "
+        "before submitting another transfer."
+    )
+    assert raw_detail.decode() not in result["guidance"]
+    assert connection.uid_calls == [(expected_command, ("3", b'"Processed"'))]
+
+
+def test_copy_fallback_first_step_tagged_no_remains_unknown_without_guidance() -> None:
+    client = _client(
+        capabilities={b"IMAP4REV1", b"UIDPLUS"},
+        uids=[7, 9],
+        failures={("COPY", 7): imaplib.IMAP4.error("rejected")},
+    )
+
+    result = move_messages(
+        client,
+        _config(),
+        {"source_mailbox": "INBOX", "target_mailbox": "Processed", "uids": [7, 9]},
+    )
+
+    assert result["results"] == [
+        {"uid": 7, "status": "timeout_unknown", "error_code": "timeout_unknown"},
+        {
+            "uid": 9,
+            "status": "failed",
+            "error_code": "not_attempted_after_timeout_unknown",
+        },
+    ]
+    assert result["external_effect_status"] == "timeout_unknown"
+    assert result["definitely_no_external_effect"] is False
+    assert "guidance" not in result
+    assert client.mutation_details == [("COPY", 7, "Processed")]
 
 
 @pytest.mark.parametrize("move_error", [RuntimeError("rejected"), ValueError("bad response")])

@@ -552,6 +552,7 @@ def _attachment_metadata(part: MimePart) -> dict[str, Any]:
         "original_filename": part.filename,
         "content_type": part.content_type,
         "size_bytes": part.size_bytes,
+        "size_bytes_basis": "bodystructure_octets",
     }
 
 

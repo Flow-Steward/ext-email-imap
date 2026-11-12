@@ -6,6 +6,7 @@ import ssl
 import sys
 from dataclasses import replace
 from pathlib import Path
+from typing import cast
 
 import pytest
 
@@ -18,7 +19,13 @@ for import_root in (BUNDLE_ROOT, SDK_PARENT):
 from fake_imap_server import FakeImapServer  # noqa: E402
 from imap_config import ImapConnectionConfig  # noqa: E402
 from imap_errors import ImapExtensionError  # noqa: E402
-from imap_transport import _parse_fetch_rows, _PinnedIMAP4, open_mailbox_client  # noqa: E402
+from imap_transport import (  # noqa: E402
+    ImapTaggedTryCreate,
+    _parse_fetch_rows,
+    _PinnedIMAP4,
+    _StdlibMailboxClient,
+    open_mailbox_client,
+)
 
 BODYSTRUCTURE_RESPONSE_LIMIT = 512 * 1024
 BODYSTRUCTURE_DEPTH_LIMIT = 32
@@ -26,6 +33,52 @@ BODYSTRUCTURE_NODE_LIMIT = 2_048
 BODYSTRUCTURE_TOKEN_LIMIT = 10_000
 FETCH_LITERAL_LIMIT = 64 * 1024
 FETCH_RESPONSE_LINE_LIMIT = BODYSTRUCTURE_RESPONSE_LIMIT + FETCH_LITERAL_LIMIT
+
+
+class _UidResponseConnection:
+    capabilities = ("IMAP4REV1", "MOVE", "UIDPLUS")
+    untagged_responses: dict[str, list[bytes]] = {}
+
+    def __init__(self, status: str, rows: list[bytes]) -> None:
+        self.status = status
+        self.rows = rows
+
+    def uid(self, *_args: object) -> tuple[str, list[bytes]]:
+        return self.status, self.rows
+
+
+@pytest.mark.parametrize("command", ["MOVE", "COPY"])
+def test_transfer_surfaces_only_actual_tagged_trycreate_as_typed_error(command: str) -> None:
+    client = _StdlibMailboxClient(
+        cast(
+            _PinnedIMAP4,
+            _UidResponseConnection("NO", [b"[TRYCREATE] synthetic detail must not escape"]),
+        )
+    )
+
+    with pytest.raises(ImapTaggedTryCreate, match="IMAP server returned TRYCREATE"):
+        client._uid_command(command, "7", b'"Processed"')
+
+
+@pytest.mark.parametrize(
+    ("status", "rows"),
+    [
+        ("NO", [b"[TRYCREATE-LOOKALIKE] not the response code"]),
+        ("NO", [b"server said [TRYCREATE] in prose"]),
+        ("OK", [b"[TRYCREATE] is not a refusal when status is OK"]),
+    ],
+)
+def test_transfer_does_not_surface_non_trycreate_response_as_guidance(
+    status: str, rows: list[bytes]
+) -> None:
+    client = _StdlibMailboxClient(cast(_PinnedIMAP4, _UidResponseConnection(status, rows)))
+
+    if status == "OK":
+        assert client._uid_command("MOVE", "7", b'"Processed"') == rows[0]
+    else:
+        with pytest.raises(imaplib.IMAP4.error) as error:
+            client._uid_command("MOVE", "7", b'"Processed"')
+        assert not isinstance(error.value, ImapTaggedTryCreate)
 
 
 def _config(*, tls_mode: str = "ssl") -> ImapConnectionConfig:

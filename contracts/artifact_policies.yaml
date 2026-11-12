@@ -4,6 +4,7 @@ policies:
       - kind: artifact
         value_type: artifact_handle
         binding_key: attachment_artifact_handle
+        presentation: {claim_output: attachment_presentation}
         filename: imap-attachment.bin
         content_type: application/octet-stream
         max_size_bytes: 20971520

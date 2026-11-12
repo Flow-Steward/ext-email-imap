@@ -46,6 +46,45 @@ def test_operation_contract_ui_and_effect_surfaces_do_not_drift(bundle_payloads)
     assert policies["policies"] == manifest["artifact_policies"]
 
 
+def test_attachment_presentation_opt_in_and_typed_output_match_all_contract_mirrors(
+    bundle_payloads,
+) -> None:
+    manifest, operations, actions, policies = bundle_payloads
+    installed = manifest["artifact_policies"][0]["outputs"][0]
+    assert installed["binding_key"] == "attachment_artifact_handle"
+    assert installed["content_type"] == "application/octet-stream"
+    assert installed["presentation"] == {"claim_output": "attachment_presentation"}
+    assert policies["policies"] == manifest["artifact_policies"]
+    operation = next(
+        row for row in operations["operations"] if row["operation_id"] == "get_attachment"
+    )
+    claim = next(
+        output for output in operation["outputs"] if output["name"] == "attachment_presentation"
+    )
+    assert claim["value_type"] == "object"
+    assert claim["schema"]["additionalProperties"] is False
+    assert (
+        set(claim["schema"]["required"])
+        == set(claim["schema"]["properties"])
+        == {
+            "artifact_id",
+            "binding_key",
+            "filename",
+            "content_type",
+            "size_bytes",
+            "sha256",
+        }
+    )
+    assert claim["schema"]["properties"]["size_bytes"] == {"type": "integer", "minimum": 0}
+    assert claim["schema"]["properties"]["sha256"] == {
+        "type": "string",
+        "pattern": "^[0-9a-f]{64}$",
+    }
+    action = next(row for row in actions["actions"] if row["action_id"] == "get_attachment")
+    assert operation["result_fields"] == ["result." + name for name in action["result_fields"]]
+    assert "attachment_presentation" in action["result_fields"]
+
+
 def test_search_result_fields_expose_pagination_and_snapshot_state(bundle_payloads) -> None:
     _manifest, operations, actions, _policies = bundle_payloads
     operation = next(
@@ -278,21 +317,24 @@ def test_mutation_result_contract_exposes_effect_certainty_at_result_level(
     action_rows = {row["action_id"]: row for row in actions["actions"]}
 
     for operation_id in MUTATIONS:
-        assert operation_rows[operation_id]["outputs"] == [
+        outputs = [
             {"name": "results", "value_type": "array"},
             {"name": "external_effect_status", "value_type": "text"},
             {"name": "definitely_no_external_effect", "value_type": "boolean"},
         ]
-        assert operation_rows[operation_id]["result_fields"] == [
+        result_fields = [
             "result.results",
             "result.external_effect_status",
             "result.definitely_no_external_effect",
         ]
-        assert action_rows[operation_id]["result_fields"] == [
-            "results",
-            "external_effect_status",
-            "definitely_no_external_effect",
-        ]
+        action_fields = ["results", "external_effect_status", "definitely_no_external_effect"]
+        if operation_id in {"move_messages", "delete_messages"}:
+            outputs.append({"name": "guidance", "value_type": "text"})
+            result_fields.append("result.guidance")
+            action_fields.append("guidance")
+        assert operation_rows[operation_id]["outputs"] == outputs
+        assert operation_rows[operation_id]["result_fields"] == result_fields
+        assert action_rows[operation_id]["result_fields"] == action_fields
 
 
 # ---------------------------------------------------------------------------

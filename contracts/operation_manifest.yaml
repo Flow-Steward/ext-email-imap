@@ -118,7 +118,12 @@ operations:
       - internal_error
   - operation_id: get_message
     display_name: Get Message
-    description: Read one message by IMAP UID without marking it as read.
+    description: >-
+      Read one message by IMAP UID without marking it as read. Attachment size_bytes
+      is the encoded MIME-part octet count reported by IMAP BODYSTRUCTURE; the
+      size_bytes_basis value is bodystructure_octets. It may differ from the decoded
+      byte count returned by Get Attachment, and reading this metadata does not fetch
+      the attachment body.
     operation_kind: source
     category: email
     connection_type_ids: [imap_mailbox]
@@ -167,7 +172,20 @@ operations:
     outputs:
       - {name: attachment_artifact_handle, value_type: artifact_handle}
       - {name: attachment_metadata, value_type: object}
-    result_fields: [result.attachment_artifact_handle, result.attachment_metadata]
+      - name: attachment_presentation
+        value_type: object
+        schema:
+          type: object
+          additionalProperties: false
+          required: [artifact_id, binding_key, filename, content_type, size_bytes, sha256]
+          properties:
+            artifact_id: {type: string, minLength: 1}
+            binding_key: {type: string, const: attachment_artifact_handle}
+            filename: {type: string, minLength: 1}
+            content_type: {type: string, minLength: 1}
+            size_bytes: {type: integer, minimum: 0}
+            sha256: {type: string, pattern: '^[0-9a-f]{64}$'}
+    result_fields: [result.attachment_artifact_handle, result.attachment_metadata, result.attachment_presentation]
     error_codes:
       - invalid_payload
       - invalid_connection
@@ -233,7 +251,8 @@ operations:
       - {name: results, value_type: array}
       - {name: external_effect_status, value_type: text}
       - {name: definitely_no_external_effect, value_type: boolean}
-    result_fields: [result.results, result.external_effect_status, result.definitely_no_external_effect]
+      - {name: guidance, value_type: text}
+    result_fields: [result.results, result.external_effect_status, result.definitely_no_external_effect, result.guidance]
     error_codes:
       - invalid_payload
       - invalid_connection
@@ -264,7 +283,8 @@ operations:
       - {name: results, value_type: array}
       - {name: external_effect_status, value_type: text}
       - {name: definitely_no_external_effect, value_type: boolean}
-    result_fields: [result.results, result.external_effect_status, result.definitely_no_external_effect]
+      - {name: guidance, value_type: text}
+    result_fields: [result.results, result.external_effect_status, result.definitely_no_external_effect, result.guidance]
     error_codes:
       - invalid_payload
       - invalid_connection

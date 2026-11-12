@@ -20,6 +20,7 @@ from imap_messages import (  # noqa: E402
     MAX_MIME_PARTS,
     MAX_TEXT_BYTES,
     get_message,
+    load_attachment,
 )
 
 
@@ -138,6 +139,7 @@ def test_get_message_returns_bounded_fields_and_part_path_attachment_ids() -> No
                     "original_filename": "invoice.pdf",
                     "content_type": "application/pdf",
                     "size_bytes": 12,
+                    "size_bytes_basis": "bodystructure_octets",
                 }
             ],
             "attachments_truncated": False,
@@ -151,6 +153,50 @@ def test_get_message_returns_bounded_fields_and_part_path_attachment_ids() -> No
     )
     assert client.mutation_calls == []
     assert "sanitized_html" not in result["message"]
+
+
+def test_get_message_reports_encoded_part_size_without_fetching_body() -> None:
+    body = b"%PDF-1.7\ninvoice12345"
+    encoded_body = base64.b64encode(body)
+    client = _message_client(
+        bodystructure=_multipart(
+            _leaf(
+                b"APPLICATION",
+                b"PDF",
+                size=len(encoded_body),
+                filename=b"invoice.pdf",
+            )
+        )
+    )
+    client.message_sections[7]["BODY[1.MIME]"] = (
+        b'Content-Type: application/pdf; name="invoice.pdf"\r\n'
+        b'Content-Disposition: attachment; filename="invoice.pdf"\r\n'
+        b"Content-Transfer-Encoding: base64\r\n\r\n"
+    )
+    client.message_sections[7]["BODY[1]"] = encoded_body
+
+    message = get_message(
+        client,
+        {
+            "mailbox": "INBOX",
+            "uid": 7,
+            "include_body": False,
+            "include_headers": False,
+            "include_attachment_metadata": True,
+        },
+    )["message"]
+    metadata_fetch_fields = [field for _uids, fields in client.fetches for field in fields]
+
+    assert len(body) == 21
+    assert message["attachments"][0]["size_bytes"] == len(encoded_body)
+    assert message["attachments"][0]["size_bytes_basis"] == "bodystructure_octets"
+    assert not any(field.startswith("BODY.PEEK[1") for field in metadata_fetch_fields)
+
+    _mailbox, _uid, attachment = load_attachment(
+        client, {"mailbox": "INBOX", "uid": 7, "attachment_id": "1"}
+    )
+    assert attachment.data == body
+    assert len(attachment.data) != message["attachments"][0]["size_bytes"]
 
 
 def test_raw_html_requires_explicit_request_and_headers_can_be_omitted() -> None:

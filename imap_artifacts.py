@@ -45,7 +45,7 @@ def get_attachment(
     artifact_writer: ArtifactWriter = write_artifact_bytes,
 ) -> dict[str, Any]:
     """Write one allowed attachment only through its signed static output grant."""
-    grant_limit = _validate_output_grant(payload)
+    grant_limit, expected_artifact_id, expected_handle = _validate_output_grant(payload)
     report_progress("Reading the message")
     mailbox, uid, attachment = load_attachment(
         client,
@@ -68,10 +68,29 @@ def get_attachment(
     if not isinstance(write_result, Mapping):
         raise _artifact_output_unavailable()
     artifact_handle = write_result.get("artifact_handle")
-    if not isinstance(artifact_handle, str) or not artifact_handle.strip():
+    artifact_id = write_result.get("artifact_id")
+    written_size = write_result.get("size_bytes")
+    if (
+        artifact_handle != expected_handle
+        or artifact_id != expected_artifact_id
+        or write_result.get("binding_key") != _BINDING_KEY
+        or write_result.get("content_type") != _GRANT_CONTENT_TYPE
+        or isinstance(written_size, bool)
+        or not isinstance(written_size, int)
+        or written_size != len(attachment.data)
+        or write_result.get("sha256") != checksum
+    ):
         raise _artifact_output_unavailable()
     return {
         "attachment_artifact_handle": artifact_handle,
+        "attachment_presentation": {
+            "artifact_id": artifact_id,
+            "binding_key": _BINDING_KEY,
+            "filename": attachment.filename,
+            "content_type": attachment.content_type,
+            "size_bytes": written_size,
+            "sha256": checksum,
+        },
         "attachment_metadata": {
             "mailbox": mailbox,
             "uid": uid,
@@ -90,7 +109,7 @@ def _size_text(size_bytes: int) -> str:
     return f"{max(1, round(size_bytes / 1024))} KB"
 
 
-def _validate_output_grant(payload: dict[str, Any]) -> int:
+def _validate_output_grant(payload: dict[str, Any]) -> tuple[int, str, str]:
     try:
         descriptor = find_artifact_descriptor(
             payload,
@@ -101,8 +120,14 @@ def _validate_output_grant(payload: dict[str, Any]) -> int:
         if not isinstance(access, dict):
             raise ArtifactAccessError("Output artifact descriptor has no access grant")
         max_size = access.get("max_size_bytes")
+        artifact_id = descriptor.get("artifact_id")
+        artifact_handle = descriptor.get("artifact_handle")
         if (
-            descriptor.get("role") != "output"
+            not isinstance(artifact_id, str)
+            or not artifact_id.strip()
+            or not isinstance(artifact_handle, str)
+            or not artifact_handle.strip()
+            or descriptor.get("role") != "output"
             or descriptor.get("binding_key") != _BINDING_KEY
             or descriptor.get("content_type") != _GRANT_CONTENT_TYPE
             or access.get("transport") != "presigned_url"
@@ -115,13 +140,19 @@ def _validate_output_grant(payload: dict[str, Any]) -> int:
             or not verified_platform_grant_signature(descriptor, access)
         ):
             raise ArtifactAccessError("Output artifact grant is not usable")
-        return max_size
+        return max_size, artifact_id, artifact_handle
     except (ArtifactAccessError, TypeError, ValueError) as exc:
         raise _artifact_output_unavailable() from exc
 
 
 def _validate_attachment_type(attachment: Attachment) -> None:
     filename = attachment.filename.lower()
+    if (
+        "/" in filename
+        or "\\" in filename
+        or any(ord(char) < 32 or ord(char) == 127 for char in filename)
+    ):
+        _attachment_type_disallowed()
     extension = next((suffix for suffix in _ALLOWED_TYPES if filename.endswith(suffix)), "")
     if not extension or attachment.content_type not in _ALLOWED_TYPES[extension]:
         _attachment_type_disallowed()

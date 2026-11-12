@@ -7,12 +7,17 @@ from typing import Any, NoReturn
 
 from imap_config import ImapConnectionConfig, connection_config_from_payload
 from imap_errors import ImapExtensionError
-from imap_transport import MailboxClient, open_mailbox_client
+from imap_transport import ImapTaggedTryCreate, MailboxClient, open_mailbox_client
 
 MutationStep = Callable[[], object]
 ClientFactory = Callable[[ImapConnectionConfig], AbstractContextManager[MailboxClient]]
 
 _MUTATION_HANDLERS = {"set_message_flags", "move_messages", "delete_messages"}
+_TRYCREATE_GUIDANCE = (
+    "The server returned TRYCREATE for a mailbox transfer. The destination mailbox may need "
+    "to be created or selected. The transfer outcome is unknown; verify the message location "
+    "before submitting another transfer."
+)
 
 
 def set_message_flags(
@@ -150,6 +155,7 @@ def _move_validated(
             lambda: client.add_flags(uid, ("\\Deleted",), silent=True),
             lambda: client.uid_expunge(uid),
         ),
+        command_errors_are_ambiguous=True,
     )
 
 
@@ -164,6 +170,7 @@ def _run_uid_batch(
     commands_by_uid = [(uid, tuple(steps_for_uid(uid))) for uid in uids]
     results: list[dict[str, object]] = []
     stop_index: int | None = None
+    guidance: str | None = None
     for index, (uid, commands) in enumerate(commands_by_uid):
         completed_steps = 0
         try:
@@ -171,6 +178,14 @@ def _run_uid_batch(
                 step()
                 completed_steps += 1
         except Exception as exc:
+            if isinstance(exc, ImapTaggedTryCreate):
+                guidance = _TRYCREATE_GUIDANCE
+            if command_errors_are_ambiguous and completed_steps and _known_mutation_failure(exc):
+                results.append(
+                    {"uid": uid, "status": "timeout_unknown", "error_code": "partial_mutation"}
+                )
+                stop_index = index + 1
+                break
             if command_errors_are_ambiguous or _ambiguous_mutation_failure(exc):
                 results.append(
                     {"uid": uid, "status": "timeout_unknown", "error_code": "timeout_unknown"}
@@ -198,10 +213,12 @@ def _run_uid_batch(
             }
             for uid in uids[stop_index:]
         )
-    return _aggregate_results(results)
+    return _aggregate_results(results, guidance=guidance)
 
 
-def _aggregate_results(results: list[dict[str, object]]) -> dict[str, Any]:
+def _aggregate_results(
+    results: list[dict[str, object]], *, guidance: str | None = None
+) -> dict[str, Any]:
     statuses = {row["status"] for row in results}
     if "timeout_unknown" in statuses or statuses == {"succeeded", "failed"}:
         status = "timeout_unknown"
@@ -217,6 +234,8 @@ def _aggregate_results(results: list[dict[str, object]]) -> dict[str, Any]:
         response["definitely_no_external_effect"] = True
     elif status == "timeout_unknown":
         response["definitely_no_external_effect"] = False
+        if guidance is not None:
+            response["guidance"] = guidance
     return response
 
 

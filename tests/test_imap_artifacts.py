@@ -91,6 +91,7 @@ def _attachment_client(
     declared_size: int | None = None,
 ) -> FakeMailboxClient:
     major, minor = content_type.split("/", 1)
+    header_filename = filename.replace("\\", "\\\\").replace('"', '\\"')
     encoded = base64.b64encode(body)
     leaf = (
         major.upper().encode(),
@@ -111,8 +112,8 @@ def _attachment_client(
         message_sections={
             7: {
                 "BODY[1.MIME]": (
-                    f'Content-Type: {content_type}; name="{filename}"\r\n'
-                    f'Content-Disposition: attachment; filename="{filename}"\r\n'
+                    f'Content-Type: {content_type}; name="{header_filename}"\r\n'
+                    f'Content-Disposition: attachment; filename="{header_filename}"\r\n'
                     "Content-Transfer-Encoding: base64\r\n\r\n"
                 ).encode(),
                 "BODY[1]": encoded,
@@ -123,6 +124,18 @@ def _attachment_client(
 
 def _attachment_input() -> dict[str, object]:
     return {"mailbox": "INBOX", "uid": 7, "attachment_id": "1"}
+
+
+def _write_receipt(data: bytes, **changes: object) -> dict[str, object]:
+    return {
+        "artifact_id": "artifact-7",
+        "artifact_handle": "artifact:artifact-7",
+        "binding_key": "attachment_artifact_handle",
+        "content_type": "application/octet-stream",
+        "size_bytes": len(data),
+        "sha256": hashlib.sha256(data).hexdigest(),
+        **changes,
+    }
 
 
 def _base64_fetch_limit(decoded_limit: int) -> int:
@@ -141,16 +154,20 @@ def test_get_attachment_writes_only_selected_bytes_to_static_grant(monkeypatch) 
         _attachment_input(),
         artifact_writer=lambda _payload, data, **kwargs: (
             writes.append((data, kwargs))  # type: ignore[func-returns-value]
-            or {
-                "artifact_handle": "artifact:artifact-7",
-                "size_bytes": len(data),
-                "sha256": hashlib.sha256(data).hexdigest(),
-            }
+            or _write_receipt(data)
         ),
     )
 
     assert result == {
         "attachment_artifact_handle": "artifact:artifact-7",
+        "attachment_presentation": {
+            "artifact_id": "artifact-7",
+            "binding_key": "attachment_artifact_handle",
+            "filename": "invoice.pdf",
+            "content_type": "application/pdf",
+            "size_bytes": len(body),
+            "sha256": hashlib.sha256(body).hexdigest(),
+        },
         "attachment_metadata": {
             "mailbox": "INBOX",
             "uid": 7,
@@ -181,6 +198,93 @@ def test_get_attachment_writes_only_selected_bytes_to_static_grant(monkeypatch) 
     assert "path" not in result
 
 
+def test_presentation_claim_uses_real_sdk_receipt_without_changing_upload_or_output_ready(
+    monkeypatch,
+) -> None:
+    import flowsteward_extension_sdk.artifacts as sdk_artifacts
+
+    body = b"sku,quantity\nA-1,4\n"
+    uploads: list[tuple[bytes, str]] = []
+    ready: list[tuple[str, str]] = []
+    monkeypatch.setattr(
+        sdk_artifacts,
+        "_write_presigned_url",
+        lambda _url, data, **kwargs: uploads.append((data, kwargs["headers"]["Content-Type"])),
+    )
+    monkeypatch.setattr(
+        sdk_artifacts,
+        "announce_output_ready",
+        lambda kind, object_id: ready.append((kind, object_id)),
+    )
+
+    result = get_attachment(
+        _attachment_client(body, filename="stock.csv", content_type="text/csv"),
+        _payload_with_output_grant(monkeypatch),
+        _attachment_input(),
+    )
+
+    assert uploads == [(body, "application/octet-stream")]
+    assert ready == [("artifact", "artifact-7")]
+    assert result["attachment_presentation"] == {
+        "artifact_id": "artifact-7",
+        "binding_key": "attachment_artifact_handle",
+        "filename": "stock.csv",
+        "content_type": "text/csv",
+        "size_bytes": len(body),
+        "sha256": hashlib.sha256(body).hexdigest(),
+    }
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"artifact_id": ""},
+        {"artifact_id": "another-output"},
+        {"artifact_handle": "artifact:another-output"},
+        {"binding_key": "other"},
+        {"content_type": "text/csv"},
+        {"size_bytes": -1},
+        {"size_bytes": True},
+        {"size_bytes": 999},
+        {"sha256": "0" * 64},
+    ],
+)
+def test_conflicting_writer_receipt_fails_instead_of_claiming_presentation(
+    monkeypatch, changes
+) -> None:
+    client = _attachment_client(b"%PDF-1.7\ninvoice")
+    with pytest.raises(ImapExtensionError) as error:
+        get_attachment(
+            client,
+            _payload_with_output_grant(monkeypatch),
+            _attachment_input(),
+            artifact_writer=lambda _payload, data, **_kwargs: _write_receipt(data, **changes),
+        )
+    assert error.value.code == "artifact_output_unavailable"
+
+
+@pytest.mark.parametrize(
+    "filename",
+    ["../invoice.pdf", "folder/invoice.pdf", "folder\\invoice.pdf", "bad\x01invoice.pdf"],
+)
+def test_unsafe_presentation_filename_is_refused_before_upload(monkeypatch, filename) -> None:
+    writes: list[bytes] = []
+
+    def writer(_payload, data, **_kwargs):
+        writes.append(data)
+        return _write_receipt(data)
+
+    with pytest.raises(ImapExtensionError) as error:
+        get_attachment(
+            _attachment_client(b"%PDF-1.7\ninvoice", filename=filename),
+            _payload_with_output_grant(monkeypatch),
+            _attachment_input(),
+            artifact_writer=writer,
+        )
+    assert error.value.code == "attachment_type_disallowed"
+    assert writes == []
+
+
 def test_get_attachment_reports_each_stage_before_it_runs(monkeypatch) -> None:
     import imap_artifacts
 
@@ -197,11 +301,7 @@ def test_get_attachment_reports_each_stage_before_it_runs(monkeypatch) -> None:
         client,
         _payload_with_output_grant(monkeypatch),
         _attachment_input(),
-        artifact_writer=lambda _payload, data, **kwargs: {
-            "artifact_handle": "artifact:artifact-7",
-            "size_bytes": len(data),
-            "sha256": hashlib.sha256(data).hexdigest(),
-        },
+        artifact_writer=lambda _payload, data, **kwargs: _write_receipt(data),
     )
 
     fetches = len(client.fetches)
@@ -246,11 +346,7 @@ def test_allows_supported_attachment_mime_extension_and_magic(
         _attachment_client(body, filename=filename, content_type=content_type),
         _payload_with_output_grant(monkeypatch),
         _attachment_input(),
-        artifact_writer=lambda _payload, data, **_kwargs: {
-            "artifact_handle": "artifact:allowed",
-            "size_bytes": len(data),
-            "sha256": hashlib.sha256(data).hexdigest(),
-        },
+        artifact_writer=lambda _payload, data, **_kwargs: _write_receipt(data),
     )
 
     assert result["attachment_metadata"]["original_filename"] == filename
@@ -339,7 +435,7 @@ def test_base64_attachment_at_decoded_limit_uses_separate_encoded_fetch_budget(
         _payload_with_output_grant(monkeypatch),
         _attachment_input(),
         artifact_writer=lambda _payload, data, **_kwargs: {
-            "artifact_handle": "artifact:decoded-limit",
+            **_write_receipt(data),
             "size_bytes": writes.append(len(data)) or len(data),  # type: ignore[func-returns-value]
             "sha256": hashlib.sha256(data).hexdigest(),
         },
@@ -407,11 +503,7 @@ def test_attachment_literals_use_bounded_partial_peek_fetches(monkeypatch) -> No
         client,
         _payload_with_output_grant(monkeypatch),
         _attachment_input(),
-        artifact_writer=lambda _payload, data, **_kwargs: {
-            "artifact_handle": "artifact:bounded",
-            "size_bytes": len(data),
-            "sha256": hashlib.sha256(data).hexdigest(),
-        },
+        artifact_writer=lambda _payload, data, **_kwargs: _write_receipt(data),
     )
 
     literal_fields = [
