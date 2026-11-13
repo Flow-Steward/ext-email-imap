@@ -1,12 +1,12 @@
 actions:
   - action_id: discover_settings
-    title: Discover IMAP Settings
-    description: Inspect saved connection settings and return provider guidance without network access.
+    title: "Inspect IMAP connection settings"
+    description: "Inspect saved connection settings and return confirmed or manual provider guidance. Create an IMAP mailbox project connection with the server host, port, SSL or STARTTLS mode, username and password, then select it for this step. Example: Inspect the saved host and TLS settings while configuring a new mailbox."
     required_scopes: [extension:invoke]
     handler: {mode: extension}
     mutates_platform: false
     workflow_visible: true
-    parameters: [{name: connection_ref, type: connection_ref, required: true}]
+    parameters: [{name: connection_ref, type: connection_ref, required: true, description: "Select the saved project connection for this operation. Credentials belong in the connection, not in the step input."}]
     result_fields: [settings]
     error_codes: [invalid_payload, invalid_connection, unsupported_provider, imap_command_failed, internal_error]
     # Audit policy this extension owns: Flow Steward applies it without
@@ -15,13 +15,13 @@ actions:
     audit:
       failure_projection: {keep_row_fields: [uid]}
   - action_id: test_connection
-    title: Test IMAP Connection
-    description: Authenticate to the selected IMAP mailbox and return capabilities.
+    title: "Test IMAP connection"
+    description: "Authenticate to the selected IMAP mailbox and report supported capabilities. Create an IMAP mailbox project connection with the server host, port, SSL or STARTTLS mode, username and password, then select it for this step. Example: Check authentication and MOVE support before building mailbox triage."
     required_scopes: [extension:invoke]
     handler: {mode: extension}
     mutates_platform: false
     workflow_visible: true
-    parameters: [{name: connection_ref, type: connection_ref, required: true}]
+    parameters: [{name: connection_ref, type: connection_ref, required: true, description: "Select the saved project connection for this operation. Credentials belong in the connection, not in the step input."}]
     result_fields:
       - capabilities
       - supports_idle
@@ -46,13 +46,13 @@ actions:
     audit:
       failure_projection: {keep_row_fields: [uid]}
   - action_id: list_mailboxes
-    title: List Mailboxes
-    description: List the selected account mailboxes without reading message content.
+    title: "List IMAP mailboxes"
+    description: "List the selected mailbox account folders without reading message content. Create an IMAP mailbox project connection with the server host, port, SSL or STARTTLS mode, username and password, then select it for this step. Example: Find the exact Inbox and processed folder names before searching or moving mail."
     required_scopes: [extension:invoke]
     handler: {mode: extension}
     mutates_platform: false
     workflow_visible: true
-    parameters: [{name: connection_ref, type: connection_ref, required: true}]
+    parameters: [{name: connection_ref, type: connection_ref, required: true, description: "Select the saved project connection for this operation. Credentials belong in the connection, not in the step input."}]
     result_fields: [mailboxes]
     error_codes:
       - invalid_payload
@@ -73,18 +73,18 @@ actions:
     audit:
       failure_projection: {keep_row_fields: [uid]}
   - action_id: search_messages
-    title: Search Messages
-    description: Search one IMAP mailbox using typed filters.
+    title: "Search IMAP messages"
+    description: "Search a mailbox with typed filters and return a bounded UID-ordered result set. Create an IMAP mailbox project connection with the server host, port, SSL or STARTTLS mode, username and password, then select it for this step. Example: Find unread invoice messages with filters {\"subject\":\"invoice\",\"unseen\":true} in INBOX."
     required_scopes: [extension:invoke]
     handler: {mode: extension}
     mutates_platform: false
     workflow_visible: true
     parameters:
-      - {name: connection_ref, type: connection_ref, required: true}
-      - {name: mailbox, type: string, required: true}
-      - {name: filters, type: object, required: false}
-      - {name: limit, type: integer, required: false}
-      - {name: cursor, type: string, required: false}
+      - {name: connection_ref, type: connection_ref, required: true, description: "Select the saved project connection for this operation. Credentials belong in the connection, not in the step input."}
+      - {name: mailbox, type: string, required: true, description: "Exact mailbox name returned by List IMAP mailboxes, such as INBOX."}
+      - {name: filters, type: object, required: false, description: "JSON object using from, to, cc, subject, text, message_id, since/before (YYYY-MM-DD), unseen/seen, flagged/unflagged, has_attachments or uid_gte/uid_lte. Do not combine opposing true flags."}
+      - {name: limit, type: integer, required: false, description: "Maximum number of results to return in this page."}
+      - {name: cursor, type: string, required: false, description: "Leave empty for the first page. For later pages, map next_cursor returned by this search and keep the same connection, filters and page size."}
     result_fields: [messages, next_cursor, truncated, uidvalidity]
     error_codes:
       - invalid_payload
@@ -108,20 +108,20 @@ actions:
       failure_projection: {keep_row_fields: [uid]}
       redact_result_fields: [body, bodyHtml, bodyText, cc, from, headers, plainText, rawHeaders, rawHtml, subject, text, to]
   - action_id: get_message
-    title: Get Message
-    description: Read one message by UID without marking it as read.
+    title: "Read IMAP message"
+    description: "Read one message by IMAP UID without marking it as read. Attachment size_bytes is the encoded MIME-part octet count reported by IMAP BODYSTRUCTURE; the size_bytes_basis value is bodystructure_octets. It may differ from the decoded byte count returned by Get Attachment, and reading this metadata does not fetch the attachment body. Create an IMAP mailbox project connection with the server host, port, SSL or STARTTLS mode, username and password, then select it for this step. Example: Read a search result UID to extract its subject and attachment metadata before processing an invoice."
     required_scopes: [extension:invoke]
     handler: {mode: extension}
     mutates_platform: false
     workflow_visible: true
     parameters:
-      - {name: connection_ref, type: connection_ref, required: true}
-      - {name: mailbox, type: string, required: true}
-      - {name: uid, type: integer, required: true}
-      - {name: include_body, type: boolean, required: false}
-      - {name: include_headers, type: boolean, required: false}
-      - {name: include_attachment_metadata, type: boolean, required: false}
-      - {name: include_raw_html, type: boolean, required: false}
+      - {name: connection_ref, type: connection_ref, required: true, description: "Select the saved project connection for this operation. Credentials belong in the connection, not in the step input."}
+      - {name: mailbox, type: string, required: true, description: "Exact mailbox name returned by List IMAP mailboxes, such as INBOX."}
+      - {name: uid, type: integer, required: true, description: "Positive numeric IMAP UID returned by Search IMAP messages, from the same mailbox."}
+      - {name: include_body, type: boolean, required: false, description: "Include the message body in the result for downstream text processing."}
+      - {name: include_headers, type: boolean, required: false, description: "Include the message headers in the result."}
+      - {name: include_attachment_metadata, type: boolean, required: false, description: "Include attachment identifiers, filenames and content types so a later download step can select a file."}
+      - {name: include_raw_html, type: boolean, required: false, description: "Include the original HTML body when HTML content is needed by a later step."}
     result_fields: [message]
     error_codes:
       - invalid_payload
@@ -147,17 +147,17 @@ actions:
       failure_projection: {keep_row_fields: [uid]}
       redact_result_fields: [body, bodyHtml, bodyText, cc, from, headers, plainText, rawHeaders, rawHtml, subject, text, to]
   - action_id: get_attachment
-    title: Get Attachment
-    description: Write one selected attachment through the approved artifact output grant.
+    title: "Download IMAP attachment"
+    description: "Write one selected message attachment to an approved workflow artifact. Choose it by exactly one of attachment_id, filename or content_type; content_type accepts a wildcard such as image/*. A selector that matches nothing, or more than one attachment, fails and names what the message actually carries. Create an IMAP mailbox project connection with the server host, port, SSL or STARTTLS mode, username and password, then select it for this step. Example: Download the invoice.pdf attachment using its attachment_id from message metadata and pass the artifact to document extraction."
     required_scopes: [extension:invoke, artifact:write]
     handler: {mode: extension}
     mutates_platform: false
     workflow_visible: true
     parameters:
-      - {name: connection_ref, type: connection_ref, required: true}
-      - {name: mailbox, type: string, required: true}
-      - {name: uid, type: integer, required: true}
-      - {name: attachment_id, type: string, required: true}
+      - {name: connection_ref, type: connection_ref, required: true, description: "Select the saved project connection for this operation. Credentials belong in the connection, not in the step input."}
+      - {name: mailbox, type: string, required: true, description: "Exact mailbox name returned by List IMAP mailboxes, such as INBOX."}
+      - {name: uid, type: integer, required: true, description: "Positive numeric IMAP UID returned by Search IMAP messages, from the same mailbox."}
+      - {name: attachment_id, type: string, required: true, description: "Attachment identifier from Read IMAP message. At runtime, supply exactly one of attachment_id, filename or content_type."}
     result_fields: [attachment_artifact_handle, attachment_metadata, attachment_presentation]
     error_codes:
       - invalid_payload
@@ -185,18 +185,18 @@ actions:
     audit:
       failure_projection: {keep_row_fields: [uid]}
   - action_id: set_message_flags
-    title: Set Message Flags
-    description: Explicitly update Seen and Flagged state for selected message UIDs.
+    title: "Set IMAP read and starred flags"
+    description: "Explicitly update Seen and Flagged state for selected message UIDs. Create an IMAP mailbox project connection with the server host, port, SSL or STARTTLS mode, username and password, then select it for this step. Example: Set seen=true after an invoice has been processed; leave flagged empty to preserve its state."
     required_scopes: [extension:invoke]
     handler: {mode: extension}
     mutates_platform: false
     workflow_visible: true
     parameters:
-      - {name: connection_ref, type: connection_ref, required: true}
-      - {name: mailbox, type: string, required: true}
-      - {name: uids, type: array, required: true}
-      - {name: seen, type: boolean, required: false}
-      - {name: flagged, type: boolean, required: false}
+      - {name: connection_ref, type: connection_ref, required: true, description: "Select the saved project connection for this operation. Credentials belong in the connection, not in the step input."}
+      - {name: mailbox, type: string, required: true, description: "Exact mailbox name returned by List IMAP mailboxes, such as INBOX."}
+      - {name: uids, type: array, required: true, description: "JSON array of positive IMAP UIDs from the selected source mailbox."}
+      - {name: seen, type: boolean, required: false, description: "Set true to mark messages read or false to mark them unread. Leave empty to preserve read state; provide at least one of seen or flagged."}
+      - {name: flagged, type: boolean, required: false, description: "Set true to star messages or false to remove the star. Leave empty to preserve starred state; provide at least one of seen or flagged."}
     result_fields: [results, external_effect_status, definitely_no_external_effect]
     error_codes:
       - invalid_payload
@@ -217,17 +217,17 @@ actions:
     audit:
       failure_projection: {keep_row_fields: [uid]}
   - action_id: move_messages
-    title: Move Messages
-    description: Explicitly move selected message UIDs between IMAP mailboxes.
+    title: "Move IMAP messages"
+    description: "Explicitly move selected message UIDs between IMAP mailboxes. Create an IMAP mailbox project connection with the server host, port, SSL or STARTTLS mode, username and password, then select it for this step. Example: Move processed UIDs from INBOX to an existing Processed folder after downstream work succeeds."
     required_scopes: [extension:invoke]
     handler: {mode: extension}
     mutates_platform: false
     workflow_visible: true
     parameters:
-      - {name: connection_ref, type: connection_ref, required: true}
-      - {name: source_mailbox, type: string, required: true}
-      - {name: target_mailbox, type: string, required: true}
-      - {name: uids, type: array, required: true}
+      - {name: connection_ref, type: connection_ref, required: true, description: "Select the saved project connection for this operation. Credentials belong in the connection, not in the step input."}
+      - {name: source_mailbox, type: string, required: true, description: "Existing mailbox containing the selected UIDs. UIDs are scoped to this mailbox."}
+      - {name: target_mailbox, type: string, required: true, description: "Existing destination mailbox name returned by List IMAP mailboxes."}
+      - {name: uids, type: array, required: true, description: "JSON array of positive IMAP UIDs from the selected source mailbox."}
     result_fields: [results, external_effect_status, definitely_no_external_effect, guidance]
     error_codes:
       - invalid_payload
@@ -249,18 +249,18 @@ actions:
     audit:
       failure_projection: {keep_row_fields: [uid]}
   - action_id: delete_messages
-    title: Delete Messages
-    description: Explicitly move selected message UIDs to trash or permanently delete them with confirmation.
+    title: "Delete or trash IMAP messages"
+    description: "Explicitly move selected message UIDs to trash or permanently delete them with confirmation. Create an IMAP mailbox project connection with the server host, port, SSL or STARTTLS mode, username and password, then select it for this step. Example: Move duplicate messages to the configured trash folder with mode=move_to_trash; permanent deletion requires confirm_permanent_delete=true."
     required_scopes: [extension:invoke]
     handler: {mode: extension}
     mutates_platform: false
     workflow_visible: true
     parameters:
-      - {name: connection_ref, type: connection_ref, required: true}
-      - {name: mailbox, type: string, required: true}
-      - {name: uids, type: array, required: true}
-      - {name: mode, type: string, required: false}
-      - {name: confirm_permanent_delete, type: boolean, required: false}
+      - {name: connection_ref, type: connection_ref, required: true, description: "Select the saved project connection for this operation. Credentials belong in the connection, not in the step input."}
+      - {name: mailbox, type: string, required: true, description: "Exact mailbox name returned by List IMAP mailboxes, such as INBOX."}
+      - {name: uids, type: array, required: true, description: "JSON array of positive IMAP UIDs from the selected source mailbox."}
+      - {name: mode, type: string, required: false, description: "move_to_trash moves messages to the connection's trash folder. permanent deletes them and also requires confirm_permanent_delete=true."}
+      - {name: confirm_permanent_delete, type: boolean, required: false, description: "Enable only with mode=permanent to confirm removal of the selected messages."}
     result_fields: [results, external_effect_status, definitely_no_external_effect, guidance]
     error_codes:
       - invalid_payload

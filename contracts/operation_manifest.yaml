@@ -1,7 +1,7 @@
 operations:
   - operation_id: discover_settings
-    display_name: Discover IMAP Settings
-    description: Inspect saved connection settings and return confirmed or manual provider guidance.
+    display_name: "Inspect IMAP connection settings"
+    description: "Inspect saved connection settings and return confirmed or manual provider guidance. Create an IMAP mailbox project connection with the server host, port, SSL or STARTTLS mode, username and password, then select it for this step. Example: Inspect the saved host and TLS settings while configuring a new mailbox."
     operation_kind: source
     category: email
     connection_type_ids: [imap_mailbox]
@@ -10,8 +10,8 @@ operations:
     result_fields: [result.settings]
     error_codes: [invalid_payload, invalid_connection, unsupported_provider, imap_command_failed, internal_error]
   - operation_id: test_connection
-    display_name: Test IMAP Connection
-    description: Authenticate to the selected IMAP mailbox and report supported capabilities.
+    display_name: "Test IMAP connection"
+    description: "Authenticate to the selected IMAP mailbox and report supported capabilities. Create an IMAP mailbox project connection with the server host, port, SSL or STARTTLS mode, username and password, then select it for this step. Example: Check authentication and MOVE support before building mailbox triage."
     operation_kind: source
     category: email
     connection_type_ids: [imap_mailbox]
@@ -42,8 +42,8 @@ operations:
       - imap_command_failed
       - internal_error
   - operation_id: list_mailboxes
-    display_name: List Mailboxes
-    description: List the selected mailbox account folders without reading message content.
+    display_name: "List IMAP mailboxes"
+    description: "List the selected mailbox account folders without reading message content. Create an IMAP mailbox project connection with the server host, port, SSL or STARTTLS mode, username and password, then select it for this step. Example: Find the exact Inbox and processed folder names before searching or moving mail."
     operation_kind: source
     category: email
     connection_type_ids: [imap_mailbox]
@@ -64,14 +64,14 @@ operations:
       - imap_command_failed
       - internal_error
   - operation_id: search_messages
-    display_name: Search Messages
-    description: Search a mailbox with typed filters and return a bounded UID-ordered result set.
+    display_name: "Search IMAP messages"
+    description: "Search a mailbox with typed filters and return a bounded UID-ordered result set. Create an IMAP mailbox project connection with the server host, port, SSL or STARTTLS mode, username and password, then select it for this step. Example: Find unread invoice messages with filters {\"subject\":\"invoice\",\"unseen\":true} in INBOX."
     operation_kind: source
     category: email
     connection_type_ids: [imap_mailbox]
     inputs:
       - {name: connection_ref, value_type: connection_ref, required: true}
-      - {name: mailbox, value_type: text, required: true}
+      - {name: mailbox, value_type: text, required: true, description: "Exact mailbox name returned by List IMAP mailboxes, such as INBOX."}
       - name: filters
         value_type: object
         required: false
@@ -94,8 +94,9 @@ operations:
             has_attachments: {type: boolean}
             uid_gte: {type: integer, minimum: 1}
             uid_lte: {type: integer, minimum: 1}
-      - {name: limit, value_type: integer, required: false}
-      - {name: cursor, value_type: text, required: false}
+        description: "JSON object using from, to, cc, subject, text, message_id, since/before (YYYY-MM-DD), unseen/seen, flagged/unflagged, has_attachments or uid_gte/uid_lte. Do not combine opposing true flags."
+      - {name: limit, value_type: integer, required: false, description: "Maximum number of results to return in this page."}
+      - {name: cursor, value_type: text, required: false, description: "Leave empty for the first page. For later pages, map next_cursor returned by this search and keep the same connection, filters and page size."}
     outputs:
       - {name: messages, value_type: array}
       - {name: next_cursor, value_type: text}
@@ -117,24 +118,19 @@ operations:
       - imap_command_failed
       - internal_error
   - operation_id: get_message
-    display_name: Get Message
-    description: >-
-      Read one message by IMAP UID without marking it as read. Attachment size_bytes
-      is the encoded MIME-part octet count reported by IMAP BODYSTRUCTURE; the
-      size_bytes_basis value is bodystructure_octets. It may differ from the decoded
-      byte count returned by Get Attachment, and reading this metadata does not fetch
-      the attachment body.
+    display_name: "Read IMAP message"
+    description: "Read one message by IMAP UID without marking it as read. Attachment size_bytes is the encoded MIME-part octet count reported by IMAP BODYSTRUCTURE; the size_bytes_basis value is bodystructure_octets. It may differ from the decoded byte count returned by Get Attachment, and reading this metadata does not fetch the attachment body. Create an IMAP mailbox project connection with the server host, port, SSL or STARTTLS mode, username and password, then select it for this step. Example: Read a search result UID to extract its subject and attachment metadata before processing an invoice."
     operation_kind: source
     category: email
     connection_type_ids: [imap_mailbox]
     inputs:
       - {name: connection_ref, value_type: connection_ref, required: true}
-      - {name: mailbox, value_type: text, required: true}
-      - {name: uid, value_type: integer, required: true}
-      - {name: include_body, value_type: boolean, required: false}
-      - {name: include_headers, value_type: boolean, required: false}
-      - {name: include_attachment_metadata, value_type: boolean, required: false}
-      - {name: include_raw_html, value_type: boolean, required: false}
+      - {name: mailbox, value_type: text, required: true, description: "Exact mailbox name returned by List IMAP mailboxes, such as INBOX."}
+      - {name: uid, value_type: integer, required: true, description: "Positive numeric IMAP UID returned by Search IMAP messages, from the same mailbox."}
+      - {name: include_body, value_type: boolean, required: false, description: "Include the message body in the result for downstream text processing."}
+      - {name: include_headers, value_type: boolean, required: false, description: "Include the message headers in the result."}
+      - {name: include_attachment_metadata, value_type: boolean, required: false, description: "Include attachment identifiers, filenames and content types so a later download step can select a file."}
+      - {name: include_raw_html, value_type: boolean, required: false, description: "Include the original HTML body when HTML content is needed by a later step."}
     outputs: [{name: message, value_type: object}]
     result_fields: [result.message]
     error_codes:
@@ -154,21 +150,18 @@ operations:
       - imap_command_failed
       - internal_error
   - operation_id: get_attachment
-    display_name: Get Attachment
-    description: 'Write one selected message attachment to an approved workflow artifact.
-      Choose it by exactly one of attachment_id, filename or content_type; content_type
-      accepts a wildcard such as image/*. A selector that matches nothing, or more than
-      one attachment, fails and names what the message actually carries.'
+    display_name: "Download IMAP attachment"
+    description: "Write one selected message attachment to an approved workflow artifact. Choose it by exactly one of attachment_id, filename or content_type; content_type accepts a wildcard such as image/*. A selector that matches nothing, or more than one attachment, fails and names what the message actually carries. Create an IMAP mailbox project connection with the server host, port, SSL or STARTTLS mode, username and password, then select it for this step. Example: Download the invoice.pdf attachment using its attachment_id from message metadata and pass the artifact to document extraction."
     operation_kind: source
     category: email
     connection_type_ids: [imap_mailbox]
     inputs:
       - {name: connection_ref, value_type: connection_ref, required: true}
-      - {name: mailbox, value_type: text, required: true}
-      - {name: uid, value_type: integer, required: true}
-      - {name: attachment_id, value_type: text, required: false}
-      - {name: filename, value_type: text, required: false}
-      - {name: content_type, value_type: text, required: false}
+      - {name: mailbox, value_type: text, required: true, description: "Exact mailbox name returned by List IMAP mailboxes, such as INBOX."}
+      - {name: uid, value_type: integer, required: true, description: "Positive numeric IMAP UID returned by Search IMAP messages, from the same mailbox."}
+      - {name: attachment_id, value_type: text, required: false, description: "Attachment identifier from Read IMAP message. At runtime, supply exactly one of attachment_id, filename or content_type."}
+      - {name: filename, value_type: text, required: false, description: "Exact attachment filename. Use only this selector, attachment_id or content_type; multiple matches fail."}
+      - {name: content_type, value_type: text, required: false, description: "Attachment MIME type or wildcard, such as application/pdf or image/*. It must identify exactly one attachment; use no other selector."}
     outputs:
       - {name: attachment_artifact_handle, value_type: artifact_handle}
       - {name: attachment_metadata, value_type: object}
@@ -207,17 +200,17 @@ operations:
       - imap_command_failed
       - internal_error
   - operation_id: set_message_flags
-    display_name: Set Message Flags
-    description: Explicitly update Seen and Flagged state for selected message UIDs.
+    display_name: "Set IMAP read and starred flags"
+    description: "Explicitly update Seen and Flagged state for selected message UIDs. Create an IMAP mailbox project connection with the server host, port, SSL or STARTTLS mode, username and password, then select it for this step. Example: Set seen=true after an invoice has been processed; leave flagged empty to preserve its state."
     operation_kind: action
     category: email
     connection_type_ids: [imap_mailbox]
     inputs:
       - {name: connection_ref, value_type: connection_ref, required: true}
-      - {name: mailbox, value_type: text, required: true}
-      - {name: uids, value_type: array, required: true}
-      - {name: seen, value_type: boolean, required: false}
-      - {name: flagged, value_type: boolean, required: false}
+      - {name: mailbox, value_type: text, required: true, description: "Exact mailbox name returned by List IMAP mailboxes, such as INBOX."}
+      - {name: uids, value_type: array, required: true, description: "JSON array of positive IMAP UIDs from the selected source mailbox."}
+      - {name: seen, value_type: boolean, required: false, description: "Set true to mark messages read or false to mark them unread. Leave empty to preserve read state; provide at least one of seen or flagged."}
+      - {name: flagged, value_type: boolean, required: false, description: "Set true to star messages or false to remove the star. Leave empty to preserve starred state; provide at least one of seen or flagged."}
     outputs:
       - {name: results, value_type: array}
       - {name: external_effect_status, value_type: text}
@@ -237,16 +230,16 @@ operations:
       - imap_command_failed
       - internal_error
   - operation_id: move_messages
-    display_name: Move Messages
-    description: Explicitly move selected message UIDs between IMAP mailboxes.
+    display_name: "Move IMAP messages"
+    description: "Explicitly move selected message UIDs between IMAP mailboxes. Create an IMAP mailbox project connection with the server host, port, SSL or STARTTLS mode, username and password, then select it for this step. Example: Move processed UIDs from INBOX to an existing Processed folder after downstream work succeeds."
     operation_kind: action
     category: email
     connection_type_ids: [imap_mailbox]
     inputs:
       - {name: connection_ref, value_type: connection_ref, required: true}
-      - {name: source_mailbox, value_type: text, required: true}
-      - {name: target_mailbox, value_type: text, required: true}
-      - {name: uids, value_type: array, required: true}
+      - {name: source_mailbox, value_type: text, required: true, description: "Existing mailbox containing the selected UIDs. UIDs are scoped to this mailbox."}
+      - {name: target_mailbox, value_type: text, required: true, description: "Existing destination mailbox name returned by List IMAP mailboxes."}
+      - {name: uids, value_type: array, required: true, description: "JSON array of positive IMAP UIDs from the selected source mailbox."}
     outputs:
       - {name: results, value_type: array}
       - {name: external_effect_status, value_type: text}
@@ -268,17 +261,17 @@ operations:
       - imap_command_failed
       - internal_error
   - operation_id: delete_messages
-    display_name: Delete Messages
-    description: Explicitly move selected message UIDs to trash or permanently delete them with confirmation.
+    display_name: "Delete or trash IMAP messages"
+    description: "Explicitly move selected message UIDs to trash or permanently delete them with confirmation. Create an IMAP mailbox project connection with the server host, port, SSL or STARTTLS mode, username and password, then select it for this step. Example: Move duplicate messages to the configured trash folder with mode=move_to_trash; permanent deletion requires confirm_permanent_delete=true."
     operation_kind: action
     category: email
     connection_type_ids: [imap_mailbox]
     inputs:
       - {name: connection_ref, value_type: connection_ref, required: true}
-      - {name: mailbox, value_type: text, required: true}
-      - {name: uids, value_type: array, required: true}
-      - {name: mode, value_type: text, required: false}
-      - {name: confirm_permanent_delete, value_type: boolean, required: false}
+      - {name: mailbox, value_type: text, required: true, description: "Exact mailbox name returned by List IMAP mailboxes, such as INBOX."}
+      - {name: uids, value_type: array, required: true, description: "JSON array of positive IMAP UIDs from the selected source mailbox."}
+      - {name: mode, value_type: text, required: false, description: "move_to_trash moves messages to the connection's trash folder. permanent deletes them and also requires confirm_permanent_delete=true."}
+      - {name: confirm_permanent_delete, value_type: boolean, required: false, description: "Enable only with mode=permanent to confirm removal of the selected messages."}
     outputs:
       - {name: results, value_type: array}
       - {name: external_effect_status, value_type: text}
