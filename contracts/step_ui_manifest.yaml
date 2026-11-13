@@ -41,3 +41,12 @@ forms:
       - {name: uids, widget_type: json, label: UIDs, required: true, help_text: "JSON array of positive IMAP UIDs from the selected source mailbox.", placeholder: "[123, 124]"}
       - {name: mode, widget_type: select, label: Mode, help_text: "move_to_trash moves messages to the connection's trash folder. permanent deletes them and also requires confirm_permanent_delete=true."}
       - {name: confirm_permanent_delete, widget_type: boolean, label: Confirm permanent deletion, help_text: "Enable only with mode=permanent to confirm removal of the selected messages."}
+  - operation_id: discover_settings
+    title: Inspect IMAP connection settings
+    fields: []
+  - operation_id: test_connection
+    title: Test IMAP connection
+    fields: []
+  - operation_id: list_mailboxes
+    title: List IMAP mailboxes
+    fields: []
